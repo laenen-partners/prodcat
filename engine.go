@@ -3,6 +3,7 @@ package prodcat
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -525,6 +526,7 @@ func matchLegalRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
 		return false, false
 	}
 
+	// Known mappings for backwards compatibility.
 	agreementTypes := map[string]string{
 		"general_tc_accepted": "general_terms_and_conditions",
 		"casa_tc_accepted":    "casa_terms_and_conditions",
@@ -532,7 +534,13 @@ func matchLegalRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
 
 	expectedType, ok := agreementTypes[eval.Writes]
 	if !ok {
-		return false, false
+		// Generic fallback: strip "_accepted" suffix and use the remainder
+		// as the agreement type. E.g. "privacy_policy_accepted" → "privacy_policy".
+		if after, found := strings.CutSuffix(eval.Writes, "_accepted"); found {
+			expectedType = after
+		} else {
+			return false, false
+		}
 	}
 
 	for _, a := range input.Agreements {

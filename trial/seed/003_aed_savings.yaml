@@ -1,0 +1,73 @@
+# AED On-Demand Savings — UAE
+# From Onboarding Spec Sections 1.1, 4 (Requirement Matrix)
+#
+# Same KYC requirements as AED Current Account (same base rulesets).
+# Differences:
+#   - Savings-specific T&C (instead of AED CA T&C)
+#   - Shariah Commodity Purchase Agreement (savings-only, spec Section 4)
+#
+# Incremental onboarding: if user already has AED CA, only the delta
+# agreements are needed — no re-collection of KYC data.
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: aed-savings-legal
+    name: AED Savings Legal
+    description: Product-specific legal agreements for AED Savings
+    version: "0.0.1"
+    evaluations:
+      - name: savings_tc
+        expression: "input.agreements.exists(a, a.type == 'savings_tc' && a.accepted)"
+        writes: savings_tc_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the savings account terms and conditions"
+
+      - name: key_facts_savings
+        expression: "input.agreements.exists(a, a.type == 'key_facts' && a.accepted)"
+        writes: key_facts_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the key facts statement"
+
+      - name: shariah_commodity
+        expression: "input.agreements.exists(a, a.type == 'shariah_commodity' && a.accepted)"
+        writes: shariah_commodity_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the Shariah Commodity Purchase Agreement"
+
+products:
+  - product_id: aed-savings
+    name: AED On-Demand Savings
+    description: Sharia-compliant AED savings account for UAE residents
+    tags:
+      - "family:savings"
+      - "type:savings"
+      - "market:uae"
+      - "currency:aed"
+      - "sharia:true"
+      - "segment:retail"
+    status: active
+    currency_code: AED
+    sharia_compliant: true
+    availability:
+      mode: specific_countries
+      country_codes:
+        - AE
+    base_ruleset_ids:
+      - base-platform-access
+      - base-age-gate-18
+      - base-uae-residence
+      - base-retail-idv
+      - base-retail-screening
+      - base-retail-address
+      - base-retail-tax
+      - base-retail-full-kyc
+      - base-privacy-policy
+      - aed-savings-legal

@@ -1,0 +1,54 @@
+# Non-KYC Products: PFM and Travel Agent
+# From Onboarding Spec Section 1.1 — these products require only
+# Module 1 (Profile Creation) + privacy policy. No KYC journey needed.
+# Users get immediate access after profile creation.
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: base-privacy-policy
+    name: Privacy Policy Acceptance
+    description: Shared privacy policy acceptance — applies to all products
+    version: "0.0.1"
+    evaluations:
+      - name: privacy_policy
+        expression: "input.agreements.exists(a, a.type == 'privacy_policy' && a.accepted)"
+        writes: privacy_policy_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the privacy policy"
+
+products:
+  - product_id: mal-pfm
+    name: Mal PFM
+    description: Personal Financial Management — accessible to all users after profile creation
+    tags:
+      - "type:pfm"
+      - "segment:all"
+      - "market:global"
+      - "kyc:none"
+    status: active
+    sharia_compliant: false
+    availability:
+      mode: global
+    base_ruleset_ids:
+      - base-platform-access
+      - base-privacy-policy
+
+  - product_id: mal-travel-agent
+    name: Mal Travel Agent
+    description: Travel planning agent — accessible to all users after profile creation
+    tags:
+      - "type:travel"
+      - "segment:all"
+      - "market:global"
+      - "kyc:none"
+    status: active
+    sharia_compliant: false
+    availability:
+      mode: global
+    base_ruleset_ids:
+      - base-platform-access
+      - base-privacy-policy

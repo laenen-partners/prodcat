@@ -1,0 +1,64 @@
+# AED Current Account — UAE
+# From Onboarding Spec Sections 1.1, 4 (Requirement Matrix)
+#
+# Full KYC journey:
+#   Module 1 (Profile)  → platform access
+#   Eligibility gates   → age 18+, UAE residency
+#   Module 3 (ID&V)     → Emirates ID scan, liveness, facial match
+#   Module 4 (KYC)      → address, screening, tax declarations
+#   Module 5 (Legal)    → AED CA T&C, privacy policy, key facts
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: aed-ca-legal
+    name: AED Current Account Legal
+    description: Product-specific legal agreements for AED Current Account
+    version: "0.0.1"
+    evaluations:
+      - name: aed_ca_tc
+        expression: "input.agreements.exists(a, a.type == 'aed_ca_tc' && a.accepted)"
+        writes: aed_ca_tc_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the AED current account terms and conditions"
+
+      - name: key_facts
+        expression: "input.agreements.exists(a, a.type == 'key_facts' && a.accepted)"
+        writes: key_facts_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the key facts statement"
+
+products:
+  - product_id: aed-current-account
+    name: AED Current Account
+    description: Sharia-compliant AED current account for UAE residents
+    tags:
+      - "family:casa"
+      - "type:current_account"
+      - "market:uae"
+      - "currency:aed"
+      - "sharia:true"
+      - "segment:retail"
+    status: active
+    currency_code: AED
+    sharia_compliant: true
+    availability:
+      mode: specific_countries
+      country_codes:
+        - AE
+    base_ruleset_ids:
+      - base-platform-access
+      - base-age-gate-18
+      - base-uae-residence
+      - base-retail-idv
+      - base-retail-screening
+      - base-retail-address
+      - base-retail-tax
+      - base-retail-full-kyc
+      - base-privacy-policy
+      - aed-ca-legal

@@ -1,0 +1,61 @@
+# USD Current Account — USA
+# From Onboarding Spec Sections 1.1, 4 (Requirement Matrix)
+#
+# KYC journey similar to AED CA but:
+#   - No UAE residency requirement (available to US residents)
+#   - Requires proof_of_address (USA regulatory, spec Section 4 conditional rules)
+#   - Different T&C (USD CA specific)
+#   - Not Sharia-compliant
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: usd-ca-legal
+    name: USD Current Account Legal
+    description: Product-specific legal agreements for USD Current Account
+    version: "0.0.1"
+    evaluations:
+      - name: usd_ca_tc
+        expression: "input.agreements.exists(a, a.type == 'usd_ca_tc' && a.accepted)"
+        writes: usd_ca_tc_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the USD current account terms and conditions"
+
+      - name: key_facts_usd
+        expression: "input.agreements.exists(a, a.type == 'key_facts' && a.accepted)"
+        writes: key_facts_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the key facts statement"
+
+products:
+  - product_id: usd-current-account
+    name: USD Current Account
+    description: USD current account regulated by Zenus (US-regulated)
+    tags:
+      - "family:casa"
+      - "type:current_account"
+      - "market:usa"
+      - "currency:usd"
+      - "segment:retail"
+    status: active
+    currency_code: USD
+    sharia_compliant: false
+    availability:
+      mode: specific_countries
+      country_codes:
+        - US
+    base_ruleset_ids:
+      - base-platform-access
+      - base-age-gate-18
+      - base-retail-idv
+      - base-retail-screening
+      - base-retail-address
+      - base-retail-tax
+      - base-retail-full-kyc
+      - base-privacy-policy
+      - usd-ca-legal
