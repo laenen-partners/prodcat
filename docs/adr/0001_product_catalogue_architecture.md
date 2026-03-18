@@ -95,60 +95,139 @@ Eligibility is the core function of the product catalogue. Every level of the hi
 
 #### 2.1 Evaluation Input
 
-The `EvaluationInput` protobuf message is the contract between the platform and the eval engine. It contains all customer data needed to evaluate eligibility for any product. The onboarding service hydrates this message from the customer's profile and passes it to the engine.
+The `EvaluationInput` protobuf message is the contract between the platform and the eval engine. It contains all data needed to evaluate eligibility — for both individuals and business entities.
+
+The engine runs at two levels per subscription:
+
+1. **Entity-level**: evaluates business KYB rules (SME) using `input.entity.*` fields. No-op for retail.
+2. **Per-party**: evaluates individual KYC/ID&V for each party using the top-level fields. The `party_role` context field allows role-specific rules.
 
 ```protobuf
 message EvaluationInput {
-  // Contact Information
-  repeated Contact contacts = 1;            // Email, phone with verified status
-
-  // Security
+  // ─── Individual / Party Data ───
+  repeated Contact contacts = 1;
   bool mpin_created = 2;
-
-  // Identity & Verification
-  repeated IdentityDocument id_documents = 3; // Scanned documents with OCR data
+  repeated IdentityDocument id_documents = 3;
   bool liveness_passed = 4;
-  int32 age = 5;                             // Derived from DOB at eval time
-  repeated string nationalities = 6;         // All nationalities (dual citizenship)
-
-  // KYC Profile
+  int32 age = 5;
+  repeated string nationalities = 6;
   Address residential_address = 7;
   Document proof_of_address = 8;
   string employment_status = 9;
   string income_range = 10;
   repeated string income_sources = 11;
   repeated string tax_residency_countries = 12;
-  string tin_1 = 13;
-  string tin_2 = 14;
-  string tin_3 = 15;
-  string tin_4 = 16;
-  optional bool pep_declared = 17;           // optional — CEL uses has() to check
+  string tin_1 = 13; string tin_2 = 14; string tin_3 = 15; string tin_4 = 16;
+  optional bool pep_declared = 17;
   bool professional_investor = 18;
-  string risk_tolerance = 19;                // "low", "medium", "high"
-
-  // Risk (system-sourced from Oscilar)
-  int32 risk_score = 20;                     // 0-100
-
-  // EDD (Enhanced Due Diligence)
+  string risk_tolerance = 19;
+  int32 risk_score = 20;
   string source_of_wealth = 21;
   repeated Document source_of_wealth_docs = 22;
   string source_of_funds = 23;
   string purpose_of_product = 24;
-  string business_ownership = 25;
-
-  // Legal Agreements
-  repeated Agreement agreements = 26;        // Type + accepted + version
-
-  // Additional Identity Documents
+  repeated Agreement agreements = 26;
   repeated Document additional_id_documents = 27;
+  string country = 28;
+  string customer_type = 29;
+  string party_role = 30;              // "primary_holder", "ubo", etc.
 
-  // Context
-  string country = 28;                       // Derived from phone country code
-  string customer_type = 29;                 // Customer segment
+  // ─── Business Entity Data (SME / Corporate) ───
+  BusinessEntity entity = 40;
 }
 ```
 
-CEL expressions reference fields as `input.contacts`, `input.age`, `input.pep_declared`, etc. The eval engine compiles these expressions against the `EvaluationInput` proto descriptor, ensuring type safety at ruleset validation time.
+**`BusinessEntity`** contains KYB (Know Your Business) data for SME/corporate subscriptions:
+
+```protobuf
+message BusinessEntity {
+  // Business Identity
+  string legal_name = 1;
+  string trading_name = 2;
+  string registration_number = 3;
+  string country_of_incorporation = 4;
+  string date_of_incorporation = 5;
+  string legal_form = 6;               // "llc", "free_zone_llc", "sole_establishment", ...
+
+  // Trade License (UAE / extensible)
+  TradeLicense trade_license = 7;
+
+  // Addresses
+  Address registered_address = 8;
+  Address trading_address = 9;
+
+  // Business Profile
+  string industry_code = 10;
+  string annual_turnover_range = 12;
+  string employee_count_range = 13;
+  string business_activity = 14;
+  repeated string operating_countries = 15;
+
+  // Ownership & Control
+  repeated UBO ubos = 16;
+  int32 total_ownership_bps = 17;      // Should sum to 10000 (100%)
+
+  // Business Documents
+  Document memorandum_of_association = 18;
+  Document certificate_of_incorporation = 19;
+  Document board_resolution = 20;
+  Document financial_statements = 21;
+
+  // Business Risk
+  int32 business_risk_score = 23;
+  bool sanctions_flagged = 24;
+
+  // Business Agreements
+  repeated Agreement agreements = 25;
+}
+```
+
+CEL expressions reference individual fields as `input.age`, `input.pep_declared` and business fields as `input.entity.trade_license.expired`, `input.entity.ubos.size()`, etc. The eval engine compiles these expressions against the `EvaluationInput` proto descriptor, ensuring type safety at ruleset validation time.
+
+Example entity-level CEL rules for SME:
+
+```yaml
+evaluations:
+  - name: trade_license_valid
+    expression: >
+      input.entity.trade_license.scanned == true
+      && input.entity.trade_license.expired == false
+    reads: [input.entity.trade_license]
+    writes: trade_license_valid
+    severity: blocking
+    category: kyb
+
+  - name: ubo_declarations_complete
+    expression: >
+      input.entity.total_ownership_bps >= 7500
+      && input.entity.ubos.all(u, u.ownership_bps > 0 || u.significant_control)
+    reads: [input.entity.ubos, input.entity.total_ownership_bps]
+    writes: ubo_declarations_complete
+    severity: blocking
+    category: kyb
+
+  - name: board_resolution_uploaded
+    expression: >
+      input.entity.board_resolution.uploaded == true
+    reads: [input.entity.board_resolution]
+    writes: board_resolution_uploaded
+    severity: blocking
+    category: kyb
+```
+
+Example per-party CEL rule that varies by role:
+
+```yaml
+  - name: signatory_agreements_accepted
+    description: Authorized signatories must accept the business account T&C
+    expression: >
+      input.party_role != "authorized_signatory"
+      || input.agreements.exists(a, a.type == "business_ca_tc" && a.accepted)
+    reads: [input.party_role, input.agreements]
+    writes: signatory_agreements_accepted
+    severity: blocking
+    category: legal
+```
 
 Supporting messages:
 
@@ -377,9 +456,97 @@ message ComplianceConfig {
 
 ### 4. Subscriptions
 
-A subscription is created when a customer begins the onboarding journey for a product. It tracks the eligibility state and provides granular control over what the customer can do.
+A subscription is created when an entity (individual or business) begins the onboarding journey for a product. It tracks eligibility state, parties involved, signing authority, and provides granular control over capabilities.
 
-#### 4.1 Subscription Status
+The subscription model supports three account structures:
+
+| Structure | Entity Type | Parties | Signing Authority |
+|-----------|-------------|---------|-------------------|
+| **Retail (single)** | Individual | 1 primary holder | Any one (default) |
+| **Joint account** | Individual | 1 primary + N joint holders | Any one / Any N / All |
+| **SME / Corporate** | Business | Authorized signatories, directors, UBOs | Configurable per capability |
+
+#### 4.1 Entities and Parties
+
+A subscription belongs to an **entity** — either an individual customer or a business:
+
+```protobuf
+message Subscription {
+  string entity_id = 3;      // Who owns this — customer ID or business entity ID
+  EntityType entity_type = 4; // INDIVIDUAL or BUSINESS
+  repeated Party parties = 5; // People involved
+  SigningAuthority signing_authority = 6;
+  // ...
+}
+```
+
+**Parties** are the people involved in the subscription. Each party has:
+
+- A **role** (primary holder, joint holder, authorized signatory, director, UBO, guardian)
+- Their own **eval state** (individual KYC requirements evaluated independently)
+- Their own **disabled state** (one party's expired ID doesn't block another party)
+
+```protobuf
+message Party {
+  string customer_id = 2;
+  PartyRole role = 3;
+  EvalState eval_state = 4;     // This party's individual KYC state
+  bool requirements_met = 5;
+  DisabledState disabled = 6;
+}
+```
+
+Party roles:
+
+| Role | Used by | Description |
+|------|---------|-------------|
+| `PRIMARY_HOLDER` | Retail, Joint | Primary account holder. Always exactly one. |
+| `JOINT_HOLDER` | Joint | Joint holder with same rights (subject to signing authority). |
+| `AUTHORIZED_SIGNATORY` | SME | Can operate the account on behalf of the business. |
+| `DIRECTOR` | SME | Director of the business. |
+| `UBO` | SME | Ultimate Beneficial Owner (25%+ ownership or significant control). |
+| `SECRETARY` | SME | Company secretary or equivalent. |
+| `POA` | Any | Power of Attorney holder. |
+| `GUARDIAN` | Minor accounts | Legal guardian. |
+
+#### 4.2 Signing Authority
+
+Signing authority defines how many parties must authorize an action:
+
+| Rule | Example |
+|------|---------|
+| `ANY_ONE` | Any single party can authorize (default for retail) |
+| `ANY_N` | Any N parties must authorize (e.g., "any two" for joint accounts) |
+| `ALL` | All parties must authorize |
+
+Signing authority can be **overridden per capability**. For example, a joint SME account might allow `ANY_ONE` for viewing balances but require `ANY_TWO` for international transfers:
+
+```protobuf
+message SigningAuthority {
+  SigningRule rule = 1;          // Default rule
+  int32 required_count = 2;     // For ANY_N
+  repeated CapabilitySigningOverride overrides = 3;  // Per-capability overrides
+}
+```
+
+#### 4.3 Evaluation Strategy
+
+The eval engine runs at two levels:
+
+**Entity-level evaluation** (subscription-level `eval_state`):
+- For **retail**: typically empty — no entity-level rules.
+- For **SME**: evaluates business KYB rules (trade license valid, UBO declarations complete, board resolution uploaded, etc.)
+
+**Per-party evaluation** (each party's `eval_state`):
+- Individual KYC, ID&V, legal agreements — evaluated independently for each party.
+- Uses the same merged ruleset (family + archetype + base + product) but with a `party_role` context field so rules can vary by role (e.g., UBOs need fewer agreements than signatories).
+
+A subscription can only activate when:
+1. Entity-level evaluation passes (all business rules met)
+2. All required parties have `requirements_met = true`
+3. Minimum party requirements are satisfied (e.g., at least one authorized signatory for SME)
+
+#### 4.4 Subscription Status
 
 Modelled after Stripe's subscription lifecycle:
 
@@ -416,8 +583,10 @@ Disabled reasons:
 | `CUSTOMER_REQUESTED` | Customer asked to disable |
 | `OPERATIONS` | Manual action by operations team |
 | `PARENT_DISABLED` | Parent subscription disabled (cascades to supplementary products) |
+| `PARTY_INCOMPLETE` | A required party has not completed their requirements |
+| `PARTY_REMOVED` | A required party was removed |
 
-The `failed_evaluations` field links back to specific eval engine results, making it possible to show the customer exactly what they need to resolve.
+The `failed_evaluations` field links back to specific eval engine results. The `caused_by_party_id` field identifies which party triggered the disable (for joint/SME accounts).
 
 #### 4.3 Capabilities
 
@@ -579,18 +748,22 @@ All ruleset create/update operations return a `RulesetValidation` result from th
 
 #### 5.2 SubscriptionService
 
-Manages customer subscriptions and their lifecycle.
+Manages subscriptions, parties, signing authority, and lifecycle. Supports retail, joint, and SME accounts.
 
 | RPC | Purpose |
 |-----|---------|
-| `Subscribe` | Start onboarding for a product (creates INCOMPLETE subscription) |
-| `GetSubscription` / `ListSubscriptions` | Query subscriptions |
-| `Evaluate` | Re-run the eval engine against current customer data; returns deltas |
-| `Activate` | Mark subscription as ACTIVE after all requirements met; set external_ref |
+| `Subscribe` | Start onboarding with entity, initial parties, and signing authority |
+| `GetSubscription` / `ListSubscriptions` | Query by subscription ID, entity ID, or customer ID (as party) |
+| `Evaluate` | Re-run eval engine: entity-level + per-party; returns all deltas |
+| `Activate` | Mark ACTIVE after all requirements met; set external_ref |
 | `Disable` / `Enable` | Disable/enable a subscription with a reason |
 | `Cancel` | Cancel a subscription |
 | `DisableCapability` / `EnableCapability` | Toggle individual capabilities |
-| `CheckAccess` | Batch check all subscriptions for a customer; detects degradation |
+| `AddParty` | Add a party (joint holder, signatory, UBO, etc.) |
+| `RemoveParty` | Remove a party from a subscription |
+| `EvaluateParty` | Re-evaluate a single party's requirements |
+| `UpdateSigningAuthority` | Change signing rules (e.g., from ANY_ONE to ANY_TWO) |
+| `CheckAccess` | Batch check all subscriptions for an entity or customer |
 
 ### 6. Proto File Structure
 
@@ -600,10 +773,10 @@ proto/prodcat/v1/
 ├── geography.proto              — GeographicAvailability, RegulatoryProvider
 ├── compliance.proto             — ComplianceConfig, LegalAgreement
 ├── eligibility.proto            — RulesetConfig, EligibilityConfig, AcceptableIDConfig, CustomerSegment
-├── evaluation_input.proto       — EvaluationInput, Contact, IdentityDocument, Address, Agreement, Document
+├── evaluation_input.proto       — EvaluationInput, BusinessEntity, Contact, IdentityDocument, Address, Agreement, Document
 ├── product.proto                — ProductFamilyDefinition, ProductArchetype, Product
 ├── product_service.proto        — ProductCatalogService RPCs
-├── subscription.proto           — Subscription, DisabledState, Capability, EvalState
+├── subscription.proto           — Subscription, Party, SigningAuthority, DisabledState, Capability, EvalState
 └── subscription_service.proto   — SubscriptionService RPCs
 ```
 
@@ -666,16 +839,121 @@ All evaluations pass → Activate(subscription_id, external_ref: "saascada-123")
     → All capabilities enabled
 ```
 
-#### 7.3 Periodic Access Check
+#### 7.3 Joint Account Onboarding
 
 ```
-CheckAccess(customer_id)
+Customer A requests joint AED Current Account
+    │
+    ▼
+Subscribe(
+  entity_id: "customer-a",
+  entity_type: INDIVIDUAL,
+  product_id: "aed-ca",
+  initial_parties: [
+    { customer_id: "customer-a", role: PRIMARY_HOLDER },
+    { customer_id: "customer-b", role: JOINT_HOLDER }
+  ],
+  signing_authority: { rule: ANY_N, required_count: 1 }
+)
+    → Creates subscription (INCOMPLETE)
+    → Runs per-party eval for both parties
+    → Party A: email_verified ✓, phone_verified ✓, mpin ✓, id_document ✗
+    → Party B: email_verified ✗, phone_verified ✗ (nothing started)
+    │
+    ▼
+Customer A completes ID&V + KYC + agreements → EvaluateParty("party-a")
+    → Party A: requirements_met = true ✓
+    │
+    ▼
+Customer B receives invite, completes onboarding → EvaluateParty("party-b")
+    → Party B: requirements_met = true ✓
+    │
+    ▼
+All parties met → Activate()
+    → Status: ACTIVE
+    → Signing authority: ANY_ONE (either party can transact)
+```
+
+If Customer B's Emirates ID later expires:
+
+```
+CheckAccess(entity_id: "customer-a")
+    → Party B: disabled { reason: EXPIRED_DATA, message: "Emirates ID expired" }
+    → Party B: requirements_met = false
+    → Subscription remains ACTIVE (Party A is still fully compliant)
+    → Party B cannot authorize transactions until refreshed
+```
+
+#### 7.4 SME Account Onboarding
+
+```
+Authorized person requests SME AED Current Account
+    │
+    ▼
+Subscribe(
+  entity_id: "business-xyz-llc",
+  entity_type: BUSINESS,
+  product_id: "sme-aed-ca",
+  initial_parties: [
+    { customer_id: "director-1",    role: DIRECTOR },
+    { customer_id: "director-1",    role: AUTHORIZED_SIGNATORY },
+    { customer_id: "ubo-1",         role: UBO },
+    { customer_id: "ubo-2",         role: UBO }
+  ],
+  signing_authority: {
+    rule: ANY_N,
+    required_count: 2,
+    overrides: [
+      { capability: VIEW, rule: ANY_ONE },
+      { capability: INTERNATIONAL_TRANSFERS, rule: ALL }
+    ]
+  }
+)
+    │
+    ▼
+Entity-level eval (KYB):
+    → trade_license_valid: ✗ (not uploaded yet)
+    → ubo_declarations_complete: ✗
+    → board_resolution_uploaded: ✗
+
+Per-party eval:
+    → Director-1 (signatory): individual KYC pending
+    → UBO-1: individual KYC pending
+    → UBO-2: individual KYC pending
+    │
+    ▼
+Business uploads trade license + board resolution → Evaluate()
+    → trade_license_valid: ✓
+    → board_resolution_uploaded: ✓
+    → ubo_declarations_complete: still ✗ (UBOs need KYC)
+    │
+    ▼
+UBO-1 and UBO-2 complete individual KYC → EvaluateParty() for each
+    → ubo_declarations_complete: ✓
+    │
+    ▼
+Director-1 completes individual KYC + signs agreements → EvaluateParty()
+    → All party requirements met
+    │
+    ▼
+Entity + all parties passed → Activate()
+    → Status: ACTIVE
+    → Signing: ANY_TWO for most capabilities
+    → VIEW: ANY_ONE (director can view alone)
+    → INTERNATIONAL_TRANSFERS: ALL (all signatories must approve)
+```
+
+#### 7.5 Periodic Access Check
+
+```
+CheckAccess(entity_id: "customer-a")
     │ For each active subscription:
-    │   Evaluate() with current customer data
-    │   Compare to previous eval_state
+    │   Entity-level eval (if business)
+    │   Per-party eval for all parties
+    │   Compare to previous states
     │   If any evaluation newly fails:
     │     Disable relevant capabilities
-    │     Set disabled reason + failed evaluations
+    │     Set disabled reason + caused_by_party_id
     │     Update subscription status if needed
     │
     ▼
@@ -683,6 +961,7 @@ Returns SubscriptionAccess[] per subscription with:
     - Current status
     - Disabled state (if any)
     - Per-capability status + disabled reasons
+    - Per-party status summary
 ```
 
 ---
@@ -697,6 +976,8 @@ Returns SubscriptionAccess[] per subscription with:
 - **Geographic extensibility**: Adding a new market means creating new products with appropriate rulesets, not changing the system architecture.
 - **Auditability**: Every eval engine run is recorded on the subscription. The `ResolveProductRuleset` RPC shows exactly which layers contribute which rules.
 - **No-deploy configuration**: All product definitions, rulesets, and eligibility rules are data. Changes take effect at the next evaluation without an app deploy.
+- **Unified account model**: Retail, joint, and SME accounts use the same subscription model. The party/signing authority abstraction handles all structures without separate code paths.
+- **Per-party evaluation**: Each party is evaluated independently. One holder's expired data doesn't automatically block the other holders, enabling graceful degradation for joint and SME accounts.
 
 ### Trade-offs
 
@@ -704,6 +985,7 @@ Returns SubscriptionAccess[] per subscription with:
 - **Ruleset merge complexity**: Merging rulesets across four layers (base + family + archetype + product) requires careful validation to avoid conflicts. The `ResolveProductRuleset` RPC mitigates this but adds a step.
 - **Eventual consistency**: The eval state on a subscription is a snapshot. Between evaluations, the actual customer data may have changed. Periodic `CheckAccess` calls are needed.
 - **Capability model maintenance**: The predefined `CapabilityType` enum must be extended as new product features are added. The `CUSTOM` type provides an escape hatch.
+- **Multi-party complexity**: Joint and SME accounts require N eval engine runs per evaluation (one per party + entity-level). The system must handle partial completion gracefully (some parties done, others not).
 
 ---
 
@@ -922,17 +1204,94 @@ evaluations:
     category: legal
 ```
 
+### A.6 Base Ruleset: KYB (Know Your Business)
+
+```yaml
+# base-kyb
+evaluations:
+  - name: trade_license_valid
+    description: Business trade license is scanned and not expired
+    expression: >
+      input.entity.trade_license.scanned == true
+      && input.entity.trade_license.expired == false
+    reads: [input.entity.trade_license]
+    writes: trade_license_valid
+    resolution_workflow: TradeLicenseUploadWorkflow
+    resolution: "Upload a valid trade license"
+    severity: blocking
+    category: kyb
+
+  - name: business_registration_verified
+    description: Business registration number has been verified
+    expression: >
+      input.entity.registration_number != ""
+      && input.entity.country_of_incorporation != ""
+    reads: [input.entity.registration_number, input.entity.country_of_incorporation]
+    writes: business_registration_verified
+    resolution_workflow: BusinessRegistrationWorkflow
+    resolution: "Provide business registration details"
+    severity: blocking
+    category: kyb
+
+  - name: registered_address_provided
+    description: Business registered address has been provided
+    expression: >
+      input.entity.registered_address.country != ""
+    reads: [input.entity.registered_address]
+    writes: registered_address_provided
+    resolution_workflow: BusinessAddressWorkflow
+    resolution: "Provide the business registered address"
+    severity: blocking
+    category: kyb
+
+  - name: ubo_declarations_complete
+    description: UBO declarations cover at least 75% ownership
+    expression: >
+      input.entity.total_ownership_bps >= 7500
+      && input.entity.ubos.all(u, u.ownership_bps > 0 || u.significant_control)
+    reads: [input.entity.ubos, input.entity.total_ownership_bps]
+    writes: ubo_declarations_complete
+    resolution_workflow: UBODeclarationWorkflow
+    resolution: "Declare all Ultimate Beneficial Owners (25%+ ownership)"
+    severity: blocking
+    category: kyb
+
+  - name: board_resolution_uploaded
+    description: Board resolution authorizing account opening has been uploaded
+    expression: >
+      input.entity.board_resolution.uploaded == true
+    reads: [input.entity.board_resolution]
+    writes: board_resolution_uploaded
+    resolution_workflow: BoardResolutionWorkflow
+    resolution: "Upload the board resolution"
+    severity: blocking
+    category: kyb
+
+  - name: business_not_sanctioned
+    description: Business is not flagged by sanctions screening
+    expression: >
+      input.entity.sanctions_flagged == false
+    reads: [input.entity.sanctions_flagged]
+    writes: business_not_sanctioned
+    resolution: "Business has been flagged by sanctions screening"
+    severity: blocking
+    category: kyb
+```
+
 ---
 
 ## Appendix B: Product Catalogue — Initial UAE Products
 
-| Product | Family | Archetype | Type | Currency | Provider | Sharia | Geography |
-|---------|--------|-----------|------|----------|----------|--------|-----------|
-| Mal PFM | PFM | PFM | Primary | — | Mal | No | Global |
-| Mal Travel Agent | Value Added | Travel Agent | Primary | — | Mal | No | Global |
-| AED Current Account | CASA | Current Account | Primary | AED | Mal (CBUAE) | Yes | UAE |
-| USD Current Account | CASA | Current Account | Primary | USD | Zenus (US) | No | USA |
-| AED On-Demand Savings | CASA | Savings Account | Primary | AED | Mal (CBUAE) | Yes | UAE |
-| AED Debit Card | Cards | Debit Card | Supplementary → AED CA | AED | Mal (CBUAE) | Yes | UAE |
-| UAE Bill Payments | Payments | Bill Payments | Supplementary → AED CA | AED | Mal (CBUAE) | Yes | UAE |
-| Global Wealth Management | Investments | Wealth Management | Primary | AED | TBD | TBD | Global except exclusion list |
+| Product | Family | Archetype | Type | Segment | Currency | Provider | Sharia | Geography |
+|---------|--------|-----------|------|---------|----------|----------|--------|-----------|
+| Mal PFM | PFM | PFM | Primary | Retail | — | Mal | No | Global |
+| Mal Travel Agent | Value Added | Travel Agent | Primary | Retail | — | Mal | No | Global |
+| AED Current Account | CASA | Current Account | Primary | Retail | AED | Mal (CBUAE) | Yes | UAE |
+| AED Joint Current Account | CASA | Current Account | Primary | Retail (Joint) | AED | Mal (CBUAE) | Yes | UAE |
+| USD Current Account | CASA | Current Account | Primary | Retail | USD | Zenus (US) | No | USA |
+| AED On-Demand Savings | CASA | Savings Account | Primary | Retail | AED | Mal (CBUAE) | Yes | UAE |
+| AED Debit Card | Cards | Debit Card | Supplementary → AED CA | Retail | AED | Mal (CBUAE) | Yes | UAE |
+| UAE Bill Payments | Payments | Bill Payments | Supplementary → AED CA | Retail | AED | Mal (CBUAE) | Yes | UAE |
+| Global Wealth Management | Investments | Wealth Management | Primary | Retail | AED | TBD | TBD | Global except exclusion list |
+| SME AED Current Account | CASA | Current Account | Primary | SME | AED | Mal (CBUAE) | Yes | UAE |
+| SME AED Savings Account | CASA | Savings Account | Primary | SME | AED | Mal (CBUAE) | Yes | UAE |

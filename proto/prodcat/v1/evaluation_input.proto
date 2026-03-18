@@ -7,22 +7,35 @@ option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
 import "google/protobuf/timestamp.proto";
 
 // EvaluationInput is the protobuf message passed to the eval engine.
-// It contains all customer data needed to evaluate eligibility for any product.
+//
+// The engine runs twice per subscription:
+//   1. Entity-level: evaluates business KYB rules (for SME) or is a no-op (for retail).
+//      Uses the `entity` field.
+//   2. Per-party: evaluates individual KYC/ID&V for each party.
+//      Uses the top-level individual fields.
+//
+// For a simple retail account, only the per-party evaluation runs (one party).
+// For joint accounts, per-party runs for each holder.
+// For SME, entity-level runs once + per-party runs for each authorized person.
 //
 // Usage:
 //   cfg, _ := evalengine.LoadDefinitions(mergedRulesetYAML)
 //   engine, _ := evalengine.NewEngine(cfg, &EvaluationInput{})
 //   results := engine.Run(input)
 //
-// CEL expressions reference fields as input.contacts, input.age, etc.
+// CEL expressions reference fields as input.contacts, input.entity.trade_license, etc.
 message EvaluationInput {
-  // ─── Contact Information ───
+  // ─── Individual / Party Data ───
+  // These fields represent a single person (party).
+  // For joint accounts / SME, the engine is called once per party.
+
+  // Contact Information
   repeated Contact contacts = 1;
 
-  // ─── Security ───
+  // Security
   bool mpin_created = 2;
 
-  // ─── Identity & Verification ───
+  // Identity & Verification
   repeated IdentityDocument id_documents = 3;
   bool liveness_passed = 4;
   // Derived from id_document DOB. Age in whole years at evaluation time.
@@ -30,7 +43,7 @@ message EvaluationInput {
   // All nationalities from scanned documents (supports dual citizenship).
   repeated string nationalities = 6;
 
-  // ─── KYC Profile ───
+  // KYC Profile
   Address residential_address = 7;
   Document proof_of_address = 8;
   string employment_status = 9;
@@ -47,21 +60,20 @@ message EvaluationInput {
   // "low", "medium", "high"
   string risk_tolerance = 19;
 
-  // ─── Risk (system-sourced) ───
+  // Risk (system-sourced)
   // Customer risk score from Oscilar (0-100).
   int32 risk_score = 20;
 
-  // ─── EDD (Enhanced Due Diligence) ───
+  // EDD (Enhanced Due Diligence)
   string source_of_wealth = 21;
   repeated Document source_of_wealth_docs = 22;
   string source_of_funds = 23;
   string purpose_of_product = 24;
-  string business_ownership = 25;
 
-  // ─── Legal Agreements ───
+  // Legal Agreements
   repeated Agreement agreements = 26;
 
-  // ─── Additional Identity Documents ───
+  // Additional Identity Documents
   repeated Document additional_id_documents = 27;
 
   // ─── Context ───
@@ -69,7 +81,104 @@ message EvaluationInput {
   string country = 28;
   // Customer segment.
   string customer_type = 29;
+  // Role of this party on the subscription (for role-specific rules).
+  // e.g., "primary_holder", "joint_holder", "authorized_signatory", "ubo".
+  string party_role = 30;
+
+  // ─── Business Entity Data (SME / Corporate) ───
+  // Populated for entity-level evaluation. Empty for individual per-party eval.
+  BusinessEntity entity = 40;
 }
+
+// BusinessEntity contains KYB (Know Your Business) data for SME/corporate subscriptions.
+// CEL expressions reference these as input.entity.trade_license, input.entity.ubos, etc.
+message BusinessEntity {
+  // ─── Business Identity ───
+  // Legal name of the business.
+  string legal_name = 1;
+  // Trading / brand name.
+  string trading_name = 2;
+  // Business registration / incorporation number.
+  string registration_number = 3;
+  // Country of incorporation (ISO 3166-1 alpha-2).
+  string country_of_incorporation = 4;
+  // Date of incorporation.
+  string date_of_incorporation = 5;
+  // Legal form (e.g., "llc", "free_zone_llc", "sole_establishment", "partnership",
+  // "public_joint_stock", "private_joint_stock", "branch").
+  string legal_form = 6;
+
+  // ─── Trade License (UAE-specific, but extensible) ───
+  TradeLicense trade_license = 7;
+
+  // ─── Business Address ───
+  Address registered_address = 8;
+  Address trading_address = 9;
+
+  // ─── Business Profile ───
+  string industry_code = 10;
+  string industry_description = 11;
+  // Annual turnover range (e.g., "0-1m", "1m-10m", "10m+").
+  string annual_turnover_range = 12;
+  // Number of employees range.
+  string employee_count_range = 13;
+  // Business activity description.
+  string business_activity = 14;
+  // Countries the business operates in.
+  repeated string operating_countries = 15;
+
+  // ─── Ownership & Control ───
+  // Ultimate Beneficial Owners (25%+ ownership or significant control).
+  // Each UBO is also a Party on the subscription with PARTY_ROLE_UBO.
+  repeated UBO ubos = 16;
+  // Total ownership percentage accounted for (should sum to 10000 bps = 100%).
+  int32 total_ownership_bps = 17;
+
+  // ─── Business Documents ───
+  Document memorandum_of_association = 18;
+  Document certificate_of_incorporation = 19;
+  Document board_resolution = 20;
+  Document financial_statements = 21;
+  repeated Document additional_documents = 22;
+
+  // ─── Business Risk ───
+  int32 business_risk_score = 23;
+  // Whether the business is in a sanctioned industry or country.
+  bool sanctions_flagged = 24;
+
+  // ─── Business Agreements ───
+  repeated Agreement agreements = 25;
+}
+
+// TradeLicense represents a UAE trade license (or equivalent business license globally).
+message TradeLicense {
+  string license_number = 1;
+  // Issuing authority (e.g., "DED", "ADGM", "DIFC", "DMCC", "JAFZA").
+  string issuing_authority = 2;
+  // License type (e.g., "commercial", "professional", "industrial").
+  string license_type = 3;
+  bool scanned = 4;
+  bool expired = 5;
+  google.protobuf.Timestamp issue_date = 6;
+  google.protobuf.Timestamp expiry_date = 7;
+  // Licensed activities listed on the trade license.
+  repeated string activities = 8;
+}
+
+// UBO represents an Ultimate Beneficial Owner.
+message UBO {
+  // Reference to the customer/person record (also a Party on the subscription).
+  string customer_id = 1;
+  string full_name = 2;
+  // Ownership percentage in basis points (e.g., 2500 = 25%).
+  int32 ownership_bps = 3;
+  // Whether this person has significant control (even if < 25% ownership).
+  bool significant_control = 4;
+  // How control is exercised (e.g., "shares", "voting_rights", "appointment_rights").
+  string control_type = 5;
+}
+
+// ─── Shared Messages ───
 
 // Contact represents a verified contact method (email, phone).
 message Contact {
@@ -109,7 +218,7 @@ message IdentityDocument {
   string issuing_country = 13;
 }
 
-// Address represents a structured residential address.
+// Address represents a structured address.
 message Address {
   string address_line_1 = 1;
   string address_line_2 = 2;
@@ -131,7 +240,7 @@ message Agreement {
   google.protobuf.Timestamp accepted_at = 4;
 }
 
-// Document represents an uploaded document (proof of address, source of wealth docs, etc.).
+// Document represents an uploaded document.
 message Document {
   string document_type = 1;
   bool uploaded = 2;

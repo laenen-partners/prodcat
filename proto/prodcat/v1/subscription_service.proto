@@ -7,7 +7,8 @@ option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
 import "google/protobuf/timestamp.proto";
 import "prodcat/v1/subscription.proto";
 
-// SubscriptionService manages customer subscriptions to products.
+// SubscriptionService manages subscriptions to products.
+// Supports retail (single holder), joint accounts, and SME.
 service SubscriptionService {
   // Start a subscription (begin onboarding for a product).
   rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
@@ -15,40 +16,65 @@ service SubscriptionService {
   // Get a subscription by ID.
   rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
 
-  // List subscriptions for a customer.
+  // List subscriptions for a customer (as any party role) or entity.
   rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
 
   // Re-evaluate a subscription against the eval engine.
-  // Updates status, capabilities, and disabled states based on current data.
+  // Runs entity-level eval (if business) + per-party eval for all parties.
   rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
 
   // Activate a subscription (all requirements met → provision in core banking).
   rpc Activate(ActivateRequest) returns (ActivateResponse);
 
-  // Disable a subscription (with reason).
+  // Disable / Enable a subscription.
   rpc Disable(DisableRequest) returns (DisableResponse);
-
-  // Re-enable a previously disabled subscription.
   rpc Enable(EnableRequest) returns (EnableResponse);
 
   // Cancel a subscription.
   rpc Cancel(CancelRequest) returns (CancelResponse);
 
-  // Disable a specific capability on a subscription.
+  // Disable / Enable a specific capability.
   rpc DisableCapability(DisableCapabilityRequest) returns (DisableCapabilityResponse);
-
-  // Re-enable a specific capability on a subscription.
   rpc EnableCapability(EnableCapabilityRequest) returns (EnableCapabilityResponse);
 
-  // Check access status for all active subscriptions of a customer.
+  // ─── Party Management ───
+  // Add a party to a subscription (e.g., add joint holder, add UBO).
+  rpc AddParty(AddPartyRequest) returns (AddPartyResponse);
+  // Remove a party from a subscription.
+  rpc RemoveParty(RemovePartyRequest) returns (RemovePartyResponse);
+  // Re-evaluate a single party's requirements.
+  rpc EvaluateParty(EvaluatePartyRequest) returns (EvaluatePartyResponse);
+
+  // ─── Signing Authority ───
+  // Update the signing authority rules for a subscription.
+  rpc UpdateSigningAuthority(UpdateSigningAuthorityRequest) returns (UpdateSigningAuthorityResponse);
+
+  // Check access status for all subscriptions of a customer or entity.
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
 }
 
 // --- Subscribe ---
 message SubscribeRequest {
-  string customer_id = 1;
-  string product_id = 2;
+  // The entity that owns the subscription.
+  // For retail: this is the individual customer ID.
+  // For SME: this is the business entity ID.
+  string entity_id = 1;
+  EntityType entity_type = 2;
+  string product_id = 3;
+
+  // Initial parties. For retail, at minimum the primary holder.
+  // For SME, authorized signatories and/or UBOs.
+  repeated PartyInput initial_parties = 4;
+
+  // Signing authority. Defaults to ANY_ONE for retail.
+  SigningAuthority signing_authority = 5;
 }
+
+message PartyInput {
+  string customer_id = 1;
+  PartyRole role = 2;
+}
+
 message SubscribeResponse {
   Subscription subscription = 1;
 }
@@ -63,10 +89,13 @@ message GetSubscriptionResponse {
 
 // --- ListSubscriptions ---
 message ListSubscriptionsRequest {
-  string customer_id = 1;
-  SubscriptionStatus status = 2;
-  int32 page_size = 3;
-  string page_token = 4;
+  // Filter by entity (business or individual).
+  string entity_id = 1;
+  // Or filter by customer_id (finds all subscriptions where this person is a party).
+  string customer_id = 2;
+  SubscriptionStatus status = 3;
+  int32 page_size = 4;
+  string page_token = 5;
 }
 message ListSubscriptionsResponse {
   repeated Subscription subscriptions = 1;
@@ -79,9 +108,11 @@ message EvaluateRequest {
 }
 message EvaluateResponse {
   Subscription subscription = 1;
+  // Changes at the subscription/entity level.
   repeated EvalDelta deltas = 2;
-  // Capabilities whose status changed as a result of this evaluation.
   repeated CapabilityDelta capability_deltas = 3;
+  // Changes at the party level.
+  repeated PartyEvalDelta party_deltas = 4;
 }
 
 message EvalDelta {
@@ -94,16 +125,22 @@ message CapabilityDelta {
   string capability_id = 1;
   CapabilityStatus previous_status = 2;
   CapabilityStatus current_status = 3;
-  // If newly disabled, the reason.
   DisabledReason reason = 4;
+}
+
+message PartyEvalDelta {
+  string party_id = 1;
+  string customer_id = 2;
+  repeated EvalDelta deltas = 3;
+  // Whether this party's requirements_met flag changed.
+  bool previously_met = 4;
+  bool now_met = 5;
 }
 
 // --- Activate ---
 message ActivateRequest {
   string subscription_id = 1;
-  // External reference from the core banking system.
   string external_ref = 2;
-  // Initial capabilities to enable. If empty, all default capabilities are enabled.
   repeated CapabilityType capabilities = 3;
 }
 message ActivateResponse {
@@ -155,9 +192,51 @@ message EnableCapabilityResponse {
   Subscription subscription = 1;
 }
 
+// --- Party Management ---
+message AddPartyRequest {
+  string subscription_id = 1;
+  string customer_id = 2;
+  PartyRole role = 3;
+}
+message AddPartyResponse {
+  Subscription subscription = 1;
+  // Initial eval state for the new party (what they need to complete).
+  Party party = 2;
+}
+
+message RemovePartyRequest {
+  string subscription_id = 1;
+  string party_id = 2;
+  string reason = 3;
+}
+message RemovePartyResponse {
+  Subscription subscription = 1;
+}
+
+message EvaluatePartyRequest {
+  string subscription_id = 1;
+  string party_id = 2;
+}
+message EvaluatePartyResponse {
+  Party party = 1;
+  repeated EvalDelta deltas = 2;
+}
+
+// --- Signing Authority ---
+message UpdateSigningAuthorityRequest {
+  string subscription_id = 1;
+  SigningAuthority signing_authority = 2;
+}
+message UpdateSigningAuthorityResponse {
+  Subscription subscription = 1;
+}
+
 // --- CheckAccess ---
 message CheckAccessRequest {
-  string customer_id = 1;
+  // Check by entity (all subscriptions for a business or individual).
+  string entity_id = 1;
+  // Or check by customer (all subscriptions where this person is a party).
+  string customer_id = 2;
 }
 message CheckAccessResponse {
   repeated SubscriptionAccess statuses = 1;
@@ -168,6 +247,15 @@ message SubscriptionAccess {
   string product_id = 2;
   SubscriptionStatus status = 3;
   DisabledState disabled = 4;
-  // Per-capability status.
   repeated Capability capabilities = 5;
+  // Per-party status summary.
+  repeated PartyAccessStatus party_statuses = 6;
+}
+
+message PartyAccessStatus {
+  string party_id = 1;
+  string customer_id = 2;
+  PartyRole role = 3;
+  bool requirements_met = 4;
+  DisabledState disabled = 5;
 }

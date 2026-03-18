@@ -6,44 +6,143 @@ option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
 
 import "google/protobuf/timestamp.proto";
 
-// Subscription is a customer's instance of a product.
-// Modelled after Stripe: a top-level status plus granular capability states,
-// each independently disabled with a reason and resolution path.
+// Subscription is an instance of a product.
+// Supports single-holder (retail), joint accounts, and SME (business entity + authorized persons).
+//
+// The subscription belongs to an entity (individual or business).
+// Parties are the people involved — each with a role, signing authority,
+// and their own eval engine state.
 message Subscription {
   string subscription_id = 1;
-  string customer_id = 2;
-  string product_id = 3;
+  string product_id = 2;
+
+  // The owning entity. For retail this is the individual customer.
+  // For SME this is the business entity.
+  string entity_id = 3;
+  EntityType entity_type = 4;
+
+  // Parties on this subscription (account holders, signatories, etc.).
+  // For a simple retail account: one party with role PRIMARY_HOLDER.
+  // For joint accounts: multiple parties with roles and signing authority.
+  // For SME: authorized persons, directors, UBOs.
+  repeated Party parties = 5;
+
+  // Signing authority required for capabilities.
+  // e.g., "any_one" for personal accounts, "any_two" for joint, "all" for some SME.
+  SigningAuthority signing_authority = 6;
 
   // Top-level status.
-  SubscriptionStatus status = 4;
+  SubscriptionStatus status = 7;
 
   // Granular capability states — each can be independently disabled.
-  // e.g., "transfers" disabled because Emirates ID expired,
-  //        "view_balance" still enabled.
-  repeated Capability capabilities = 5;
+  repeated Capability capabilities = 8;
 
-  // Current eval engine state.
-  EvalState eval_state = 6;
+  // Subscription-level eval state (entity-level: business KYB, etc.).
+  // Party-level eval states are on each Party.
+  EvalState eval_state = 9;
 
   // For supplementary products: the parent subscription.
-  string parent_subscription_id = 7;
+  string parent_subscription_id = 10;
 
   // External reference in the core banking system.
-  string external_ref = 8;
+  string external_ref = 11;
 
   // Lifecycle timestamps.
-  google.protobuf.Timestamp created_at = 10;
-  google.protobuf.Timestamp activated_at = 11;
-  google.protobuf.Timestamp canceled_at = 12;
+  google.protobuf.Timestamp created_at = 20;
+  google.protobuf.Timestamp activated_at = 21;
+  google.protobuf.Timestamp canceled_at = 22;
 
   // Disabled state at the subscription level (Stripe-style).
-  // When set, the entire subscription is disabled regardless of capability states.
-  DisabledState disabled = 13;
+  DisabledState disabled = 23;
+}
+
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  // Individual retail customer.
+  ENTITY_TYPE_INDIVIDUAL = 1;
+  // Business entity (SME, corporate).
+  ENTITY_TYPE_BUSINESS = 2;
+}
+
+// Party is a person involved in a subscription.
+// Each party has their own role, eval state, and can independently
+// cause the subscription to degrade if their data expires.
+message Party {
+  string party_id = 1;
+  // Reference to the customer/person record.
+  string customer_id = 2;
+  PartyRole role = 3;
+
+  // This party's eval engine state (individual KYC, ID&V, etc.).
+  // Evaluated independently — one party's expired ID doesn't automatically
+  // block another party's capabilities.
+  EvalState eval_state = 4;
+
+  // Whether this party has completed all their requirements.
+  bool requirements_met = 5;
+
+  // Disabled state for this party.
+  DisabledState disabled = 6;
+
+  google.protobuf.Timestamp added_at = 7;
+  google.protobuf.Timestamp removed_at = 8;
+}
+
+enum PartyRole {
+  PARTY_ROLE_UNSPECIFIED = 0;
+
+  // ─── Retail / Joint ───
+  // Primary account holder. Always exactly one.
+  PARTY_ROLE_PRIMARY_HOLDER = 1;
+  // Joint account holder. Same rights as primary (subject to signing authority).
+  PARTY_ROLE_JOINT_HOLDER = 2;
+
+  // ─── SME / Corporate ───
+  // Authorized signatory — can operate the account.
+  PARTY_ROLE_AUTHORIZED_SIGNATORY = 3;
+  // Director of the business.
+  PARTY_ROLE_DIRECTOR = 4;
+  // Ultimate Beneficial Owner (25%+ ownership or significant control).
+  PARTY_ROLE_UBO = 5;
+  // Company secretary or equivalent.
+  PARTY_ROLE_SECRETARY = 6;
+
+  // ─── Shared ───
+  // Power of Attorney holder.
+  PARTY_ROLE_POA = 7;
+  // Guardian (for minor accounts).
+  PARTY_ROLE_GUARDIAN = 8;
+}
+
+// SigningAuthority defines how many parties must authorize an action.
+message SigningAuthority {
+  SigningRule rule = 1;
+  // For ANY_N: how many parties must sign (e.g., 2 for "any two").
+  int32 required_count = 2;
+  // Optional: override signing authority per capability type.
+  // e.g., VIEW can be "any_one" while INTERNATIONAL_TRANSFERS requires "all".
+  repeated CapabilitySigningOverride overrides = 3;
+}
+
+enum SigningRule {
+  SIGNING_RULE_UNSPECIFIED = 0;
+  // Any single party can authorize (default for retail).
+  SIGNING_RULE_ANY_ONE = 1;
+  // Any N parties must authorize (common for joint accounts).
+  SIGNING_RULE_ANY_N = 2;
+  // All parties must authorize.
+  SIGNING_RULE_ALL = 3;
+}
+
+message CapabilitySigningOverride {
+  CapabilityType capability_type = 1;
+  SigningRule rule = 2;
+  int32 required_count = 3;
 }
 
 enum SubscriptionStatus {
   SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
-  // Onboarding in progress, requirements not yet met.
+  // Onboarding in progress, not all requirements met.
   SUBSCRIPTION_STATUS_INCOMPLETE = 1;
   // All requirements met, product is live.
   SUBSCRIPTION_STATUS_ACTIVE = 2;
@@ -54,77 +153,52 @@ enum SubscriptionStatus {
 }
 
 // DisabledState — Stripe-style "disabled" with a reason.
-// Applied at the subscription level or at individual capability level.
 message DisabledState {
   bool disabled = 1;
   DisabledReason reason = 2;
-  // Human-readable explanation.
   string message = 3;
-  // When this was disabled.
   google.protobuf.Timestamp disabled_at = 4;
-  // Eval results that caused the disable (if driven by the eval engine).
   repeated string failed_evaluations = 5;
+  // For party-related disables: which party caused it.
+  string caused_by_party_id = 6;
 }
 
 enum DisabledReason {
   DISABLED_REASON_UNSPECIFIED = 0;
-  // Eligibility requirement not met or expired.
   DISABLED_REASON_REQUIREMENTS_NOT_MET = 1;
-  // Document or data element has expired.
   DISABLED_REASON_EXPIRED_DATA = 2;
-  // Failed re-evaluation (e.g., risk score changed).
   DISABLED_REASON_FAILED_EVALUATION = 3;
-  // Regulatory hold (compliance/AML/sanctions).
   DISABLED_REASON_REGULATORY_HOLD = 4;
-  // Fraud suspicion.
   DISABLED_REASON_FRAUD_SUSPICION = 5;
-  // Customer requested.
   DISABLED_REASON_CUSTOMER_REQUESTED = 6;
-  // Operations / manual action.
   DISABLED_REASON_OPERATIONS = 7;
-  // Parent subscription is disabled (cascade from primary product).
   DISABLED_REASON_PARENT_DISABLED = 8;
+  // A required party has not completed their requirements.
+  DISABLED_REASON_PARTY_INCOMPLETE = 9;
+  // A party has been removed but was required for the product.
+  DISABLED_REASON_PARTY_REMOVED = 10;
 }
 
-// Capability represents a specific feature of the product that can be
-// independently enabled/disabled. Analogous to Stripe's capability model.
+// Capability represents a specific feature that can be independently enabled/disabled.
 message Capability {
   string capability_id = 1;
   CapabilityType capability_type = 2;
-
-  // Whether this capability is currently active.
   CapabilityStatus status = 3;
-
-  // If not active, why — and what to do about it.
   DisabledState disabled = 4;
-
-  // Requirements specific to this capability (from the eval engine).
-  // e.g., "international_transfers" might require additional KYC beyond
-  // what the base product requires.
   repeated EvalResult requirements = 5;
 }
 
 enum CapabilityType {
   CAPABILITY_TYPE_UNSPECIFIED = 0;
-  // Can view balances and transaction history.
   CAPABILITY_TYPE_VIEW = 1;
-  // Can make domestic transfers.
   CAPABILITY_TYPE_DOMESTIC_TRANSFERS = 2;
-  // Can make international transfers.
   CAPABILITY_TYPE_INTERNATIONAL_TRANSFERS = 3;
-  // Can use the debit card.
   CAPABILITY_TYPE_CARD_PAYMENTS = 4;
-  // Can withdraw from ATM.
   CAPABILITY_TYPE_ATM = 5;
-  // Can receive incoming payments.
   CAPABILITY_TYPE_RECEIVE = 6;
-  // Can use bill payments.
   CAPABILITY_TYPE_BILL_PAYMENTS = 7;
-  // Can use FX / currency conversion.
   CAPABILITY_TYPE_FX = 8;
-  // Can set up standing orders / recurring.
   CAPABILITY_TYPE_STANDING_ORDERS = 9;
-  // Custom capability (use capability_id for details).
   CAPABILITY_TYPE_CUSTOM = 99;
 }
 
@@ -132,11 +206,11 @@ enum CapabilityStatus {
   CAPABILITY_STATUS_UNSPECIFIED = 0;
   CAPABILITY_STATUS_ACTIVE = 1;
   CAPABILITY_STATUS_DISABLED = 2;
-  // Pending — requirements exist but not yet evaluated/completed.
   CAPABILITY_STATUS_PENDING = 3;
 }
 
-// EvalState captures the eval engine's last evaluation for this subscription.
+// EvalState captures the eval engine's last evaluation.
+// Used at subscription level (entity/business rules) and party level (individual KYC).
 message EvalState {
   EvalStatus overall_status = 1;
   repeated EvalResult results = 2;
@@ -153,7 +227,6 @@ enum EvalStatus {
   EVAL_STATUS_BLOCKED = 4;
 }
 
-// EvalResult is a single evaluation outcome from the eval engine.
 message EvalResult {
   string name = 1;
   bool passed = 2;
