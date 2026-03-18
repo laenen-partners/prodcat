@@ -81,12 +81,22 @@ func seedMalSubscription(t *testing.T, engine *prodcat.Engine, tracker prodcat.S
 	require.NoError(t, err)
 }
 
+const retailKycSeedFile = "seed/2026031803_base_retail_kyc.yaml"
+
 func seedCASA(t *testing.T, engine *prodcat.Engine, tracker prodcat.SeedTracker) {
 	t.Helper()
+	ctx := context.Background()
 	seedMalSubscription(t, engine, tracker)
+
+	// Load retail KYC rulesets (CASA depends on them).
+	retailData, err := os.ReadFile(retailKycSeedFile)
+	require.NoError(t, err)
+	err = engine.ApplySeed(ctx, retailKycSeedFile, retailData, tracker)
+	require.NoError(t, err)
+
 	data, err := os.ReadFile(casaSeedFile)
 	require.NoError(t, err)
-	err = engine.ApplySeed(context.Background(), casaSeedFile, data, tracker)
+	err = engine.ApplySeed(ctx, casaSeedFile, data, tracker)
 	require.NoError(t, err)
 }
 
@@ -146,6 +156,20 @@ func passport(verified bool) prodcat.IDDocumentInput {
 
 func uaePass(verified bool) prodcat.IDDocumentInput {
 	return prodcat.IDDocumentInput{DocumentType: "uae_pass", IssuingCountry: "AE", Verified: verified}
+}
+
+func fullRetailKYC() prodcat.KycChecks {
+	return prodcat.KycChecks{
+		LivenessPassed:              true,
+		FacialMatchPassed:           true,
+		ResidentialAddressValidated: true,
+		PEPScreeningClear:           true,
+		SanctionsScreeningClear:     true,
+		AdverseMediaClear:           true,
+		TaxResidencyDeclared:        true,
+		FATCADeclared:               true,
+		CRSDeclared:                 true,
+	}
 }
 
 func agreements(types ...string) []prodcat.AgreementInput {
@@ -376,6 +400,7 @@ func TestCheckEligibility(t *testing.T) {
 				withContacts(email(true), phone(true)),
 				withAge(25), withResidence("AE"),
 				withDocs(passport(true), uaePass(true)),
+				withKYC(fullRetailKYC()),
 			)},
 			Agreements: agreements("general_terms_and_conditions", "casa_terms_and_conditions"),
 		},
@@ -458,6 +483,7 @@ func TestCASA_FullyEligible(t *testing.T) {
 			withContacts(email(true), phone(true)),
 			withAge(25), withResidence("AE"),
 			withDocs(passport(true), uaePass(true)),
+			withKYC(fullRetailKYC()),
 		)},
 		Agreements: agreements("general_terms_and_conditions", "casa_terms_and_conditions"),
 	})
@@ -540,12 +566,13 @@ func TestCASA_ProgressiveOnboarding(t *testing.T) {
 	assert.Equal(t, prodcat.RequirementStatusPassed, byName["age_18_plus"].Status)
 	assert.Equal(t, prodcat.RequirementStatusPending, byName["valid_passport"].Status)
 
-	// Step 3: everything.
+	// Step 3: everything including KYC.
 	r3, err := engine.Evaluate(ctx, "casa-current-account-uae", prodcat.EvaluationInput{
 		Parties: []prodcat.EvalPartyInput{primaryHolder(
 			withContacts(email(true), phone(true)),
 			withAge(25), withResidence("AE"),
 			withDocs(passport(true), uaePass(true)),
+			withKYC(fullRetailKYC()),
 		)},
 		Agreements: agreements("general_terms_and_conditions", "casa_terms_and_conditions"),
 	})

@@ -8,11 +8,11 @@ version: "1.0"
 rulesets:
   - id: base-age-gate-18
     name: Age Gate 18+
-    description: Requires the customer to be at least 18 years old
+    description: Requires the primary holder to be at least 18 years old
     version: "0.0.1"
     evaluations:
       - name: age_18_plus
-        expression: "input.age >= 18"
+        expression: "input.parties.exists(p, p.role == 1 && p.age >= 18)"
         writes: age_eligible
         severity: blocking
         category: eligibility
@@ -21,11 +21,11 @@ rulesets:
 
   - id: base-uae-residence
     name: UAE Residence
-    description: Requires UAE residency
+    description: Requires the primary holder to be a UAE resident
     version: "0.0.1"
     evaluations:
       - name: uae_resident
-        expression: "input.country_of_residence == 'AE'"
+        expression: "input.parties.exists(p, p.role == 1 && p.country_of_residence == 'AE')"
         writes: uae_resident
         severity: blocking
         category: eligibility
@@ -38,7 +38,7 @@ rulesets:
     version: "0.0.1"
     evaluations:
       - name: valid_passport
-        expression: "input.id_documents.exists(d, d.document_type == 'passport' && d.verified && !d.expired)"
+        expression: "input.parties.exists(p, p.role == 1 && p.id_documents.exists(d, d.document_type == 'passport' && d.verified && !d.expired))"
         writes: valid_passport
         severity: blocking
         category: identity
@@ -46,7 +46,7 @@ rulesets:
         resolution: "Please upload a valid passport"
 
       - name: uae_pass_verified
-        expression: "input.id_documents.exists(d, d.document_type == 'uae_pass' && d.verified)"
+        expression: "input.parties.exists(p, p.role == 1 && p.id_documents.exists(d, d.document_type == 'uae_pass' && d.verified))"
         writes: uae_pass_verified
         severity: blocking
         category: identity

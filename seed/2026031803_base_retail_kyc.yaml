@@ -1,5 +1,12 @@
 # Base Retail KYC — reusable ruleset for retail (individual) products.
 # Covers the standard KYC journey for individual customers in the UAE.
+#
+# Rules reference parties by role:
+#   role == 1  primary_holder
+#   role == 2  joint_holder
+#
+# For single-holder products, only the primary holder is evaluated.
+# For joint accounts, ALL holders (primary + joint) must pass each check.
 
 kind: seed
 version: "1.0"
@@ -7,11 +14,11 @@ version: "1.0"
 rulesets:
   - id: base-retail-idv
     name: Retail Identity Verification
-    description: Identity verification requirements for individual customers
+    description: Identity verification requirements for all account holders
     version: "0.0.1"
     evaluations:
       - name: liveness_check
-        expression: "input.parties[0].kyc.liveness_passed"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.liveness_passed)"
         writes: liveness_passed
         severity: blocking
         category: kyc
@@ -19,7 +26,7 @@ rulesets:
         resolution: "Please complete the liveness check"
 
       - name: facial_match
-        expression: "input.parties[0].kyc.facial_match_passed"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.facial_match_passed)"
         writes: facial_match_passed
         severity: blocking
         category: kyc
@@ -27,7 +34,7 @@ rulesets:
         resolution: "Please complete the facial match verification"
 
       - name: id_document_verified
-        expression: "input.parties[0].id_documents.exists(d, d.verified && !d.expired)"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.id_documents.exists(d, d.verified && !d.expired))"
         writes: id_document_verified
         severity: blocking
         category: identity
@@ -36,11 +43,11 @@ rulesets:
 
   - id: base-retail-screening
     name: Retail Screening
-    description: PEP, sanctions, and adverse media screening for individuals
+    description: PEP, sanctions, and adverse media screening for all account holders
     version: "0.0.1"
     evaluations:
       - name: pep_screening
-        expression: "input.parties[0].kyc.pep_screening_clear"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.pep_screening_clear)"
         writes: pep_screening_clear
         severity: blocking
         category: kyc
@@ -48,7 +55,7 @@ rulesets:
         resolution: "Pending PEPs screening by compliance team"
 
       - name: sanctions_screening
-        expression: "input.parties[0].kyc.sanctions_screening_clear"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.sanctions_screening_clear)"
         writes: sanctions_screening_clear
         severity: blocking
         category: kyc
@@ -56,7 +63,7 @@ rulesets:
         resolution: "Pending sanctions screening by compliance team"
 
       - name: adverse_media_screening
-        expression: "input.parties[0].kyc.adverse_media_clear"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.adverse_media_clear)"
         writes: adverse_media_clear
         severity: blocking
         category: kyc
@@ -65,11 +72,11 @@ rulesets:
 
   - id: base-retail-address
     name: Retail Address Verification
-    description: Residential address verification for individuals
+    description: Residential address verification for all account holders
     version: "0.0.1"
     evaluations:
       - name: residential_address
-        expression: "input.parties[0].kyc.residential_address_validated"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.residential_address_validated)"
         writes: residential_address_validated
         severity: blocking
         category: kyc
@@ -78,11 +85,11 @@ rulesets:
 
   - id: base-retail-tax
     name: Retail Tax Declarations
-    description: Tax residency and FATCA/CRS declarations
+    description: Tax residency and FATCA/CRS declarations for all account holders
     version: "0.0.1"
     evaluations:
       - name: tax_residency
-        expression: "input.parties[0].kyc.tax_residency_declared"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.tax_residency_declared)"
         writes: tax_residency_declared
         severity: blocking
         category: kyc
@@ -90,7 +97,7 @@ rulesets:
         resolution: "Please declare your tax residency"
 
       - name: fatca_declaration
-        expression: "input.parties[0].kyc.fatca_declared"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.fatca_declared)"
         writes: fatca_declared
         severity: blocking
         category: kyc
@@ -98,7 +105,7 @@ rulesets:
         resolution: "Please complete FATCA self-certification"
 
       - name: crs_declaration
-        expression: "input.parties[0].kyc.crs_declared"
+        expression: "input.parties.filter(p, p.role == 1 || p.role == 2).all(p, p.kyc.crs_declared)"
         writes: crs_declared
         severity: blocking
         category: kyc

@@ -12,14 +12,14 @@ rulesets:
     version: "0.0.1"
     evaluations:
       - name: email_verified
-        expression: "input.contacts.exists(c, c.type == 1 && c.primary && c.verified)"
+        expression: "input.parties.exists(p, p.role == 1 && p.contacts.exists(c, c.type == 1 && c.primary && c.verified))"
         writes: email_verified
         severity: blocking
         category: contact
         resolution: "Please verify your email address"
 
       - name: phone_verified
-        expression: "input.contacts.exists(c, c.type == 2 && c.primary && c.verified)"
+        expression: "input.parties.exists(p, p.role == 1 && p.contacts.exists(c, c.type == 2 && c.primary && c.verified))"
         writes: phone_verified
         severity: blocking
         category: contact
