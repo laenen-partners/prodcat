@@ -461,6 +461,21 @@ func evaluateRule(eval evaluationYAML, input EvaluationInput, state map[string]r
 	return RequirementStatusPending, false
 }
 
+// primaryParty returns the primary holder from the input.
+// If no primary holder exists, returns the first party.
+// If no parties exist, returns nil.
+func primaryParty(input EvaluationInput) *EvalPartyInput {
+	for i := range input.Parties {
+		if input.Parties[i].Role == PartyRolePrimaryHolder {
+			return &input.Parties[i]
+		}
+	}
+	if len(input.Parties) > 0 {
+		return &input.Parties[0]
+	}
+	return nil
+}
+
 // matchRule is a simplified rule matcher for common patterns.
 // Returns (passed, dataPresent).
 func matchRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
@@ -473,44 +488,43 @@ func matchRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
 		return matchIdentityRule(eval, input)
 	case "eligibility":
 		return matchEligibilityRule(eval, input)
+	case "kyc":
+		return matchKycRule(eval, input)
 	default:
-		// Unknown category — treat as pending (data not available).
 		return false, false
 	}
 }
 
 func matchContactRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
-	if len(input.Contacts) == 0 {
-		return false, false // no contact data → pending
+	p := primaryParty(input)
+	if p == nil || len(p.Contacts) == 0 {
+		return false, false
 	}
 
 	switch eval.Writes {
 	case "email_verified":
-		for _, c := range input.Contacts {
+		for _, c := range p.Contacts {
 			if c.Type == 1 && c.Primary {
 				return c.Verified, true
 			}
 		}
-		return false, false // no primary email → pending
-
+		return false, false
 	case "phone_verified":
-		for _, c := range input.Contacts {
+		for _, c := range p.Contacts {
 			if c.Type == 2 && c.Primary {
 				return c.Verified, true
 			}
 		}
-		return false, false // no primary phone → pending
+		return false, false
 	}
-
 	return false, false
 }
 
 func matchLegalRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
 	if len(input.Agreements) == 0 {
-		return false, false // no agreement data → pending
+		return false, false
 	}
 
-	// Map writes to expected agreement type.
 	agreementTypes := map[string]string{
 		"general_tc_accepted": "general_terms_and_conditions",
 		"casa_tc_accepted":    "casa_terms_and_conditions",
@@ -526,23 +540,25 @@ func matchLegalRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
 			return a.Accepted, true
 		}
 	}
-	return false, false // agreement type not in input → pending
+	return false, false
 }
 
 func matchEligibilityRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
+	p := primaryParty(input)
+
 	switch eval.Writes {
 	case "age_eligible":
-		if input.Age == 0 {
-			return false, false // no age data → pending
+		if p == nil || p.Age == 0 {
+			return false, false
 		}
-		return input.Age >= 18, true
+		return p.Age >= 18, true
 	case "uae_resident":
-		if input.CountryOfResidence == "" {
-			return false, false // no residence data → pending
+		if p == nil || p.CountryOfResidence == "" {
+			return false, false
 		}
-		return input.CountryOfResidence == "AE", true
+		return p.CountryOfResidence == "AE", true
 	case "nationality_eligible":
-		if len(input.Nationalities) == 0 {
+		if p == nil || len(p.Nationalities) == 0 {
 			return false, false
 		}
 		return true, true
@@ -551,34 +567,70 @@ func matchEligibilityRule(eval evaluationYAML, input EvaluationInput) (bool, boo
 }
 
 func matchIdentityRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
-	if len(input.IDDocuments) == 0 {
-		return false, false // no ID data → pending
+	p := primaryParty(input)
+	if p == nil || len(p.IDDocuments) == 0 {
+		return false, false
 	}
 
 	switch eval.Writes {
 	case "valid_passport":
-		for _, doc := range input.IDDocuments {
+		for _, doc := range p.IDDocuments {
 			if doc.DocumentType == "passport" {
 				return doc.Verified && !doc.Expired, true
 			}
 		}
-		return false, false // no passport → pending
+		return false, false
 	case "uae_pass_verified":
-		for _, doc := range input.IDDocuments {
+		for _, doc := range p.IDDocuments {
 			if doc.DocumentType == "uae_pass" {
 				return doc.Verified, true
 			}
 		}
-		return false, false // no UAE Pass → pending
+		return false, false
 	default:
-		// Generic: any valid document.
-		for _, doc := range input.IDDocuments {
+		for _, doc := range p.IDDocuments {
 			if doc.Verified && !doc.Expired {
 				return true, true
 			}
 		}
-		return false, true // data present but no valid doc
+		return false, true
 	}
+}
+
+func matchKycRule(eval evaluationYAML, input EvaluationInput) (bool, bool) {
+	p := primaryParty(input)
+	if p == nil {
+		return false, false
+	}
+	kyc := p.KYC
+
+	switch eval.Writes {
+	case "liveness_passed":
+		return kyc.LivenessPassed, true
+	case "facial_match_passed":
+		return kyc.FacialMatchPassed, true
+	case "residential_address_validated":
+		return kyc.ResidentialAddressValidated, true
+	case "pep_screening_clear":
+		return kyc.PEPScreeningClear, true
+	case "sanctions_screening_clear":
+		return kyc.SanctionsScreeningClear, true
+	case "adverse_media_clear":
+		return kyc.AdverseMediaClear, true
+	case "source_of_funds_verified":
+		return kyc.SourceOfFundsVerified, true
+	case "source_of_wealth_verified":
+		return kyc.SourceOfWealthVerified, true
+	case "tax_residency_declared":
+		return kyc.TaxResidencyDeclared, true
+	case "fatca_declared":
+		return kyc.FATCADeclared, true
+	case "crs_declared":
+		return kyc.CRSDeclared, true
+	case "employment_verified":
+		return kyc.EmploymentVerified, true
+	}
+	return false, false
 }
 
 // resolveFailureMode converts the YAML string to the domain type.

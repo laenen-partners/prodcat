@@ -4,44 +4,166 @@ package eligibility.v1;
 
 option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
 
+import "google/protobuf/timestamp.proto";
+
 // EvaluationInput is the input contract for eligibility evaluation.
-// It carries all the data the eval engine needs to make eligibility decisions.
+// It is party-centric: each party on the subscription carries their own
+// data (contacts, KYC, documents). Agreements and entity-level data live
+// at the top level since they apply to the subscription as a whole.
 message EvaluationInput {
-  repeated Contact contacts = 1;
-  bool mpin_created = 2;
-  repeated IdentityDocument id_documents = 3;
-  bool liveness_passed = 4;
-  int32 age = 5;
-  repeated string nationalities = 6;
-  string country_of_residence = 7;
-  repeated Agreement agreements = 8;
-  BusinessEntity entity = 9;
+  // Parties being evaluated (primary holder, joint holders, UBOs, etc.)
+  repeated PartyInput parties = 1;
+
+  // Agreements accepted at the subscription/entity level.
+  repeated Agreement agreements = 2;
+
+  // Business entity details (for business subscriptions).
+  BusinessEntity business_entity = 3;
+}
+
+// ─── Party ───
+
+// PartyType distinguishes individuals from organisations.
+enum PartyType {
+  PARTY_TYPE_UNSPECIFIED = 0;
+  PARTY_TYPE_INDIVIDUAL = 1;
+  PARTY_TYPE_ORGANISATION = 2;
+}
+
+// PartyRole defines a party's role on the subscription.
+enum PartyRole {
+  PARTY_ROLE_UNSPECIFIED = 0;
+  PARTY_ROLE_PRIMARY_HOLDER = 1;
+  PARTY_ROLE_JOINT_HOLDER = 2;
+  PARTY_ROLE_AUTHORIZED_SIGNATORY = 3;
+  PARTY_ROLE_DIRECTOR = 4;
+  PARTY_ROLE_UBO = 5;
+  PARTY_ROLE_SECRETARY = 6;
+  PARTY_ROLE_POA = 7;
+  PARTY_ROLE_GUARDIAN = 8;
+}
+
+// PartyInput carries all evaluation data for a single party.
+message PartyInput {
+  string party_id = 1;
+  PartyType type = 2;
+  PartyRole role = 3;
+
+  // Contact information.
+  repeated Contact contacts = 10;
+
+  // Identity documents.
+  repeated IdentityDocument id_documents = 11;
+
+  // Demographics.
+  int32 age = 20;
+  repeated string nationalities = 21;
+  string country_of_residence = 22;
+
+  // KYC checks — each has a passed flag and a timestamp.
+  KycChecks kyc = 30;
+
+  // Security.
+  bool mpin_created = 40;
+}
+
+// ─── Contact ───
+
+enum ContactType {
+  CONTACT_TYPE_UNSPECIFIED = 0;
+  CONTACT_TYPE_EMAIL = 1;
+  CONTACT_TYPE_PHONE = 2;
 }
 
 message Contact {
-  // ContactType: 1=email, 2=phone
-  int32 type = 1;
+  ContactType type = 1;
   string value = 2;
   bool primary = 3;
   bool verified = 4;
+  google.protobuf.Timestamp verified_on = 5;
 }
+
+// ─── Identity Documents ───
 
 message IdentityDocument {
-  string document_type = 1;
-  string issuing_country = 2;
+  string document_type = 1;   // passport, emirates_id, uae_pass, national_id, ...
+  string issuing_country = 2; // ISO 3166-1 alpha-2
   bool verified = 3;
   bool expired = 4;
+  google.protobuf.Timestamp verified_on = 5;
+  google.protobuf.Timestamp expiry_date = 6;
+  string document_number = 7;
 }
+
+// ─── KYC Checks ───
+
+// KycChecks captures the state of all KYC verification steps for a party.
+// Each check has a bool (passed/not) and a timestamp (when it was verified).
+message KycChecks {
+  // Identity verification (IDV).
+  bool liveness_passed = 1;
+  google.protobuf.Timestamp liveness_passed_on = 2;
+
+  bool facial_match_passed = 3;
+  google.protobuf.Timestamp facial_match_passed_on = 4;
+
+  // Address verification.
+  bool residential_address_validated = 10;
+  google.protobuf.Timestamp residential_address_validated_on = 11;
+
+  // Screening.
+  bool pep_screening_clear = 20;
+  google.protobuf.Timestamp pep_screening_clear_on = 21;
+
+  bool sanctions_screening_clear = 22;
+  google.protobuf.Timestamp sanctions_screening_clear_on = 23;
+
+  bool adverse_media_clear = 24;
+  google.protobuf.Timestamp adverse_media_clear_on = 25;
+
+  // Source of funds / wealth.
+  bool source_of_funds_verified = 30;
+  google.protobuf.Timestamp source_of_funds_verified_on = 31;
+
+  bool source_of_wealth_verified = 32;
+  google.protobuf.Timestamp source_of_wealth_verified_on = 33;
+
+  // Tax / regulatory.
+  bool tax_residency_declared = 40;
+  google.protobuf.Timestamp tax_residency_declared_on = 41;
+
+  bool fatca_declared = 42;
+  google.protobuf.Timestamp fatca_declared_on = 43;
+
+  bool crs_declared = 44;
+  google.protobuf.Timestamp crs_declared_on = 45;
+
+  // Employment.
+  bool employment_verified = 50;
+  google.protobuf.Timestamp employment_verified_on = 51;
+
+  // Risk assessment.
+  string risk_rating = 60;  // low, medium, high
+  google.protobuf.Timestamp risk_rating_on = 61;
+}
+
+// ─── Agreements ───
 
 message Agreement {
-  string type = 1;
+  string type = 1;     // general_terms_and_conditions, casa_terms_and_conditions, ...
   bool accepted = 2;
   string version = 3;
+  google.protobuf.Timestamp accepted_on = 4;
 }
 
+// ─── Business Entity ───
+
 message BusinessEntity {
-  string entity_type = 1;
-  string jurisdiction = 2;
+  string entity_type = 1;    // sole_proprietor, sme, corporate
+  string jurisdiction = 2;   // ISO 3166-1 alpha-2
   bool trade_license_valid = 3;
-  repeated string authorized_activities = 4;
+  google.protobuf.Timestamp trade_license_expiry = 4;
+  repeated string authorized_activities = 5;
+  bool incorporation_verified = 6;
+  google.protobuf.Timestamp incorporation_verified_on = 7;
 }
