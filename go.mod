@@ -1,4 +1,4 @@
-module github.com/plaenen/prodcat
+module github.com/laenen-partners/prodcat
 
 go 1.25.6
 
