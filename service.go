@@ -2,139 +2,114 @@ package prodcat
 
 import "context"
 
-// CatalogService manages the product hierarchy and eval engine rulesets.
-type CatalogService interface {
-	// Families
-	CreateFamily(ctx context.Context, f FamilyDefinition) (FamilyDefinition, error)
-	GetFamily(ctx context.Context, id string) (FamilyDefinition, error)
-	ListFamilies(ctx context.Context) ([]FamilyDefinition, error)
-	UpdateFamily(ctx context.Context, f FamilyDefinition) (FamilyDefinition, error)
-
-	// Archetypes
-	CreateArchetype(ctx context.Context, a Archetype) (Archetype, error)
-	GetArchetype(ctx context.Context, id string) (Archetype, error)
-	ListArchetypes(ctx context.Context, familyID string) ([]Archetype, error)
-	UpdateArchetype(ctx context.Context, a Archetype) (Archetype, error)
-
+// EligibilityService manages product eligibility configuration and evaluation.
+type EligibilityService interface {
 	// Products
-	CreateProduct(ctx context.Context, p Product) (Product, error)
-	GetProduct(ctx context.Context, id string) (Product, error)
-	ListProducts(ctx context.Context, filter ProductFilter) ([]Product, error)
-	UpdateProduct(ctx context.Context, p Product) (Product, error)
-	TransitionProductStatus(ctx context.Context, id string, target ProductStatus, reason string) (Product, error)
+	RegisterProduct(ctx context.Context, p ProductEligibility) error
+	GetProduct(ctx context.Context, productID string) (ProductEligibility, error)
+	ListProducts(ctx context.Context, filter TagFilter) ([]ProductEligibility, error)
+	UpdateProduct(ctx context.Context, p ProductEligibility) error
 
 	// Base rulesets
-	CreateBaseRuleset(ctx context.Context, r BaseRuleset) (BaseRuleset, RulesetValidation, error)
-	GetBaseRuleset(ctx context.Context, id string) (BaseRuleset, error)
-	ListBaseRulesets(ctx context.Context) ([]BaseRuleset, error)
-	UpdateBaseRuleset(ctx context.Context, r BaseRuleset) (BaseRuleset, RulesetValidation, error)
+	CreateRuleset(ctx context.Context, r BaseRuleset) (BaseRuleset, error)
+	GetRuleset(ctx context.Context, id string) (BaseRuleset, error)
+	ListRulesets(ctx context.Context) ([]BaseRuleset, error)
 
-	// Product discovery
-	ListAvailableProducts(ctx context.Context, filter AvailableProductFilter) ([]Product, error)
-
-	// Ruleset resolution
-	ResolveProductRuleset(ctx context.Context, productID string) (ResolvedRuleset, error)
+	// Evaluation
+	Evaluate(ctx context.Context, productID string, input EvaluationInput) (EvaluationResult, error)
+	ResolveRuleset(ctx context.Context, productID string) (ResolvedRuleset, error)
 }
 
 // SubscriptionService manages customer subscriptions and their lifecycle.
 type SubscriptionService interface {
-	// Subscription lifecycle
 	Subscribe(ctx context.Context, req SubscribeRequest) (Subscription, error)
 	GetSubscription(ctx context.Context, id string) (Subscription, error)
 	ListSubscriptions(ctx context.Context, filter SubscriptionFilter) ([]Subscription, error)
 	Activate(ctx context.Context, id string, externalRef string, capabilities []CapabilityType) (Subscription, error)
 	Cancel(ctx context.Context, id string, reason string) (Subscription, error)
 
-	// Disable / Enable
 	Disable(ctx context.Context, id string, reason DisabledReason, message string) (Subscription, error)
 	Enable(ctx context.Context, id string) (Subscription, error)
-	DisableCapability(ctx context.Context, subscriptionID string, capabilityID string, reason DisabledReason, message string) (Subscription, error)
-	EnableCapability(ctx context.Context, subscriptionID string, capabilityID string) (Subscription, error)
+	DisableCapability(ctx context.Context, subID string, capID string, reason DisabledReason, message string) (Subscription, error)
+	EnableCapability(ctx context.Context, subID string, capID string) (Subscription, error)
 
-	// Evaluation
-	Evaluate(ctx context.Context, subscriptionID string) (Subscription, []EvalDelta, error)
-	EvaluateParty(ctx context.Context, subscriptionID string, partyID string) (Party, []EvalDelta, error)
-	CheckAccess(ctx context.Context, entityID string) ([]SubscriptionAccess, error)
-
-	// Party management
-	AddParty(ctx context.Context, subscriptionID string, customerID string, role PartyRole) (Subscription, error)
-	RemoveParty(ctx context.Context, subscriptionID string, partyID string, reason string) (Subscription, error)
-
-	// Signing authority
-	UpdateSigningAuthority(ctx context.Context, subscriptionID string, authority SigningAuthority) (Subscription, error)
+	AddParty(ctx context.Context, subID string, customerID string, role PartyRole) (Subscription, error)
+	RemoveParty(ctx context.Context, subID string, partyID string) (Subscription, error)
 }
 
-// ─── Request / Response Types ───
+// ─── Request / Filter Types ───
 
-type ProductFilter struct {
-	ArchetypeID  string
-	FamilyID     string
-	Status       ProductStatus
-	CurrencyCode string
-	CountryCode  string
-	Limit        int
-	Offset       int
+// TagFilter filters products by tags.
+type TagFilter struct {
+	Tags        []string // all must match
+	CountryCode string
+	Status      ProductStatus
 }
 
-type AvailableProductFilter struct {
-	CountryCode  string
-	CustomerType CustomerType
-	Family       ProductFamily
+// EvaluationInput carries the data needed for eligibility evaluation.
+type EvaluationInput struct {
+	Contacts    []ContactInput    `json:"contacts"`
+	Agreements  []AgreementInput  `json:"agreements"`
+	IDDocuments []IDDocumentInput `json:"id_documents"`
+
+	MPINCreated      bool     `json:"mpin_created"`
+	LivenessPassed   bool     `json:"liveness_passed"`
+	Age              int      `json:"age"`
+	Nationalities    []string `json:"nationalities"`
+	CountryOfResidence string `json:"country_of_residence"`
+
+	Entity *BusinessEntityInput `json:"entity,omitempty"`
 }
 
+// ContactInput represents a contact method.
+type ContactInput struct {
+	Type     int    `json:"type"` // 1=email, 2=phone
+	Value    string `json:"value"`
+	Primary  bool   `json:"primary"`
+	Verified bool   `json:"verified"`
+}
+
+// AgreementInput represents a legal agreement acceptance.
+type AgreementInput struct {
+	Type     string `json:"type"`
+	Accepted bool   `json:"accepted"`
+	Version  string `json:"version"`
+}
+
+// IDDocumentInput represents an identity document.
+type IDDocumentInput struct {
+	DocumentType   string `json:"document_type"`
+	IssuingCountry string `json:"issuing_country"`
+	Verified       bool   `json:"verified"`
+	Expired        bool   `json:"expired"`
+}
+
+// BusinessEntityInput represents a business entity.
+type BusinessEntityInput struct {
+	EntityType           string   `json:"entity_type"`
+	Jurisdiction         string   `json:"jurisdiction"`
+	TradeLicenseValid    bool     `json:"trade_license_valid"`
+	AuthorizedActivities []string `json:"authorized_activities"`
+}
+
+// SubscribeRequest creates a new subscription.
 type SubscribeRequest struct {
-	EntityID         string
-	EntityType       EntityType
-	ProductID        string
-	InitialParties   []PartyInput
-	SigningAuthority SigningAuthority
+	EntityID   string     `json:"entity_id"`
+	EntityType EntityType `json:"entity_type"`
+	ProductID  string     `json:"product_id"`
+	Parties    []PartyInput `json:"parties"`
 }
 
+// PartyInput is a party to add to a subscription.
 type PartyInput struct {
-	CustomerID string
-	Role       PartyRole
+	CustomerID string    `json:"customer_id"`
+	Role       PartyRole `json:"role"`
 }
 
+// SubscriptionFilter filters subscriptions.
 type SubscriptionFilter struct {
-	EntityID   string
-	CustomerID string
-	Status     SubscriptionStatus
-	Limit      int
-	Offset     int
-}
-
-type EvalDelta struct {
-	EvaluationName string
-	PreviouslyPassed bool
-	NowPassed        bool
-}
-
-type SubscriptionAccess struct {
-	SubscriptionID string
-	ProductID      string
-	Status         SubscriptionStatus
-	Disabled       *DisabledState
-	Capabilities   []Capability
-	PartyStatuses  []PartyAccessStatus
-}
-
-type PartyAccessStatus struct {
-	PartyID        string
-	CustomerID     string
-	Role           PartyRole
-	RequirementsMet bool
-	Disabled       *DisabledState
-}
-
-type ResolvedRuleset struct {
-	ProductID  string
-	Merged     []byte
-	Validation RulesetValidation
-	Layers     []RulesetLayer
-}
-
-type RulesetLayer struct {
-	Source          string // "base", "family", "archetype", "product"
-	SourceID        string
-	EvaluationCount int
+	EntityID string
+	Status   SubscriptionStatus
+	Limit    int
+	Offset   int
 }

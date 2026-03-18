@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+// EvaluationInput is the input contract for eligibility evaluation.
+// It carries all the data the eval engine needs to make eligibility decisions.
+message EvaluationInput {
+  repeated Contact contacts = 1;
+  bool mpin_created = 2;
+  repeated IdentityDocument id_documents = 3;
+  bool liveness_passed = 4;
+  int32 age = 5;
+  repeated string nationalities = 6;
+  string country_of_residence = 7;
+  repeated Agreement agreements = 8;
+  BusinessEntity entity = 9;
+}
+
+message Contact {
+  // ContactType: 1=email, 2=phone
+  int32 type = 1;
+  string value = 2;
+  bool primary = 3;
+  bool verified = 4;
+}
+
+message IdentityDocument {
+  string document_type = 1;
+  string issuing_country = 2;
+  bool verified = 3;
+  bool expired = 4;
+}
+
+message Agreement {
+  string type = 1;
+  bool accepted = 2;
+  string version = 3;
+}
+
+message BusinessEntity {
+  string entity_type = 1;
+  string jurisdiction = 2;
+  bool trade_license_valid = 3;
+  repeated string authorized_activities = 4;
+}

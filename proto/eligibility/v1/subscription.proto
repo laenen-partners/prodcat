@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+import "entitystore/v1/options.proto";
+
+// Subscription is a customer's relationship with a product.
+message Subscription {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    allowed_relations: ["subscribed_to", "has_party", "has_capability"]
+    extraction_display_name: "Subscription"
+  };
+
+  string subscription_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+  }];
+
+  string product_id = 2;
+  string entity_id = 3;
+  string entity_type = 4;
+  string status = 5;
+  string signing_rule = 6;
+  int32 required_count = 7;
+  bool disabled = 8;
+  string disabled_reason = 9;
+  string disabled_message = 10;
+  string external_ref = 11;
+}

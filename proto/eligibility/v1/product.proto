@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+import "entitystore/v1/options.proto";
+
+// Product defines a product's eligibility configuration.
+// The product's operational details (fees, rates, limits) live in core banking.
+// This only captures what's needed for eligibility decisions.
+message Product {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    allowed_relations: ["has_ruleset", "parent_of"]
+    extraction_display_name: "Product"
+  };
+
+  string product_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+    normalizer: NORMALIZER_LOWERCASE_TRIM
+  }];
+
+  string name = 2 [(entitystore.v1.field) = {
+    embed: true
+    token_field: true
+  }];
+
+  string description = 3 [(entitystore.v1.field) = {
+    embed: true
+  }];
+
+  repeated string tags = 4;
+  string status = 5;
+  string currency_code = 6;
+  string parent_product_id = 7;
+  bool sharia_compliant = 8;
+  string availability_mode = 9;
+  repeated string country_codes = 10;
+  repeated string base_ruleset_ids = 11;
+  bytes ruleset = 12;
+}

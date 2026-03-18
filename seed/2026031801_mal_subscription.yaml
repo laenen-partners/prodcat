@@ -1,0 +1,58 @@
+# Mal Subscription — Base platform access
+# "Mal" (مال) means "wealth/money" in Arabic.
+# Every user must complete these requirements before accessing the platform.
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: base-platform-access
+    name: Base Platform Access
+    description: Core requirements for platform access — email, phone, T&C
+    version: "0.0.1"
+    evaluations:
+      - name: email_verified
+        expression: "input.contacts.exists(c, c.type == 1 && c.primary && c.verified)"
+        writes: email_verified
+        severity: blocking
+        category: contact
+        resolution: "Please verify your email address"
+
+      - name: phone_verified
+        expression: "input.contacts.exists(c, c.type == 2 && c.primary && c.verified)"
+        writes: phone_verified
+        severity: blocking
+        category: contact
+        resolution: "Please verify your phone number"
+
+      - name: general_tc_accepted
+        expression: "input.agreements.exists(a, a.type == 'general_terms_and_conditions' && a.accepted)"
+        writes: general_tc_accepted
+        severity: blocking
+        category: legal
+        resolution: "Please accept the general terms and conditions"
+
+      - name: platform_access_ready
+        expression: "email_verified && phone_verified && general_tc_accepted"
+        reads:
+          - email_verified
+          - phone_verified
+          - general_tc_accepted
+        writes: platform_access_ready
+        severity: blocking
+        category: readiness
+
+products:
+  - product_id: mal-subscription
+    name: Mal Subscription
+    description: Base platform access — required for all users
+    tags:
+      - "type:platform_access"
+      - "segment:all"
+      - "market:global"
+    status: active
+    sharia_compliant: false
+    availability:
+      mode: global
+    base_ruleset_ids:
+      - base-platform-access

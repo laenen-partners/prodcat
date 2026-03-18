@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+import "entitystore/v1/options.proto";
+
+// Capability represents a feature on a subscription that can be independently controlled.
+message Capability {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    extraction_display_name: "Capability"
+  };
+
+  string capability_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+  }];
+
+  string capability_type = 2;
+  string status = 3;
+  bool disabled = 4;
+  string disabled_reason = 5;
+  string disabled_message = 6;
+}

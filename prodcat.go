@@ -1,25 +1,11 @@
-// Package prodcat is a lightweight product catalogue for digital banking.
-// It defines products, eligibility requirements (via eval engine rulesets),
-// and customer subscriptions with Stripe-style capability control.
+// Package prodcat is an eligibility engine for digital banking.
+// It determines who can have which products, what they still need to do,
+// and whether anything has changed that affects their access.
 package prodcat
 
 import "time"
 
-// ─── Product Hierarchy Enums ───
-
-// ProductFamily is the top-level product grouping.
-type ProductFamily string
-
-const (
-	ProductFamilyCASA       ProductFamily = "casa"
-	ProductFamilyLending    ProductFamily = "lending"
-	ProductFamilyCards      ProductFamily = "cards"
-	ProductFamilyPayments   ProductFamily = "payments"
-	ProductFamilyInvestment ProductFamily = "investments"
-	ProductFamilyInsurance  ProductFamily = "insurance"
-	ProductFamilyPFM        ProductFamily = "pfm"
-	ProductFamilyValueAdded ProductFamily = "value_added"
-)
+// ─── Product Enums ───
 
 // ProductStatus tracks the product lifecycle.
 type ProductStatus string
@@ -32,16 +18,6 @@ const (
 	ProductStatusRetired    ProductStatus = "retired"
 )
 
-// ProductType distinguishes standalone and linked products.
-type ProductType string
-
-const (
-	ProductTypePrimary       ProductType = "primary"
-	ProductTypeSupplementary ProductType = "supplementary"
-)
-
-// ─── Eligibility Enums ───
-
 // AvailabilityMode defines how geographic availability is interpreted.
 type AvailabilityMode string
 
@@ -49,30 +25,6 @@ const (
 	AvailabilityModeSpecificCountries AvailabilityMode = "specific_countries"
 	AvailabilityModeGlobal            AvailabilityMode = "global"
 	AvailabilityModeGlobalExcept      AvailabilityMode = "global_except"
-)
-
-// CustomerType restricts products by customer segment.
-type CustomerType string
-
-const (
-	CustomerTypeIndividual     CustomerType = "individual"
-	CustomerTypeSoleProprietor CustomerType = "sole_proprietor"
-	CustomerTypeSME            CustomerType = "sme"
-	CustomerTypeCorporate      CustomerType = "corporate"
-	CustomerTypeMinor          CustomerType = "minor"
-	CustomerTypeNonResident    CustomerType = "non_resident"
-)
-
-// AgreementType categorises legal agreements.
-type AgreementType string
-
-const (
-	AgreementTypeTermsAndConditions      AgreementType = "terms_and_conditions"
-	AgreementTypePrivacyPolicy           AgreementType = "privacy_policy"
-	AgreementTypeKeyFactsStatement       AgreementType = "key_facts_statement"
-	AgreementTypeShariah                 AgreementType = "shariah_commodity_purchase"
-	AgreementTypeDataProcessing          AgreementType = "data_processing"
-	AgreementTypeCustom                  AgreementType = "custom"
 )
 
 // ─── Subscription Enums ───
@@ -131,7 +83,6 @@ const (
 	CapabilityTypeBillPayments           CapabilityType = "bill_payments"
 	CapabilityTypeFX                     CapabilityType = "fx"
 	CapabilityTypeStandingOrders         CapabilityType = "standing_orders"
-	CapabilityTypeCustom                 CapabilityType = "custom"
 )
 
 // CapabilityStatus tracks whether a capability is usable.
@@ -159,210 +110,184 @@ const (
 	DisabledReasonPartyRemoved       DisabledReason = "party_removed"
 )
 
-// EvalStatus is the overall status of an eval engine run.
-type EvalStatus string
+// ─── Evaluation Enums ───
+
+// EligibilityVerdict is the overall outcome of an eligibility evaluation.
+// It distinguishes between "definitely no", "need more data", and "yes".
+type EligibilityVerdict string
 
 const (
-	EvalStatusAllPassed      EvalStatus = "all_passed"
-	EvalStatusWorkflowActive EvalStatus = "workflow_active"
-	EvalStatusActionRequired EvalStatus = "action_required"
-	EvalStatusBlocked        EvalStatus = "blocked"
+	// EligibilityVerdictEligible means all blocking requirements are met.
+	EligibilityVerdictEligible EligibilityVerdict = "eligible"
+
+	// EligibilityVerdictNotEligible means at least one blocking requirement
+	// definitively failed — the customer cannot have this product regardless
+	// of what additional data they provide.
+	// Example: age < 18 for investment products, blocked nationality.
+	EligibilityVerdictNotEligible EligibilityVerdict = "not_eligible"
+
+	// EligibilityVerdictIncomplete means no blocking requirements have
+	// definitively failed, but some cannot be evaluated yet because the
+	// required input data is missing or unverified.
+	// Example: email not yet verified, ID document not yet uploaded.
+	EligibilityVerdictIncomplete EligibilityVerdict = "incomplete"
 )
 
-// ─── Product Hierarchy Types ───
+// RequirementStatus is the outcome of a single evaluation rule.
+type RequirementStatus string
 
-// FamilyDefinition is the top level of the product hierarchy.
-type FamilyDefinition struct {
-	ID          string            `json:"id" db:"id"`
-	Family      ProductFamily     `json:"family" db:"family"`
-	Name        map[string]string `json:"name" db:"name"`
-	Description map[string]string `json:"description" db:"description"`
-	Ruleset     []byte            `json:"ruleset,omitempty" db:"ruleset"`
-	BaseRulesetIDs []string       `json:"base_ruleset_ids,omitempty" db:"base_ruleset_ids"`
-	CreatedAt   time.Time         `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at" db:"updated_at"`
+const (
+	// RequirementStatusPassed means the requirement is met.
+	RequirementStatusPassed RequirementStatus = "passed"
+
+	// RequirementStatusFailed means the requirement is definitively not met.
+	// The customer's data was evaluated and they don't qualify.
+	// Only produced by rules with failure_mode "definitive".
+	RequirementStatusFailed RequirementStatus = "failed"
+
+	// RequirementStatusPending means the requirement is not yet met but
+	// can still be resolved — by the customer, by providing data, or by
+	// a human reviewer.
+	RequirementStatusPending RequirementStatus = "pending"
+)
+
+// FailureMode declares what happens when a rule evaluates to false.
+// It tells the caller who needs to act and how.
+type FailureMode string
+
+const (
+	// FailureModeActionable means the customer can self-serve to resolve it.
+	// Example: verify email, accept T&C.
+	FailureModeActionable FailureMode = "actionable"
+
+	// FailureModeInputRequired means the system needs more data from
+	// the customer before the rule can be evaluated.
+	// Example: upload ID document, provide nationality.
+	FailureModeInputRequired FailureMode = "input_required"
+
+	// FailureModeManualReview means a human (compliance officer, ops)
+	// must make a decision. The system cannot auto-resolve.
+	// Example: PEPs screening, sanctions check, source of funds review.
+	FailureModeManualReview FailureMode = "manual_review"
+
+	// FailureModeDefinitive means the customer is disqualified.
+	// No action can change this outcome.
+	// Example: age < 18, blocked jurisdiction.
+	FailureModeDefinitive FailureMode = "definitive"
+)
+
+// ─── Domain Types ───
+
+// ProductEligibility is a product's eligibility configuration.
+// The product's operational details (fees, rates, limits) live in core banking.
+type ProductEligibility struct {
+	ProductID       string           `json:"product_id"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description"`
+	Tags            []string         `json:"tags"`
+	Status          ProductStatus    `json:"status"`
+	CurrencyCode    string           `json:"currency_code,omitempty"`
+	ParentProductID string           `json:"parent_product_id,omitempty"`
+	ShariaCompliant bool             `json:"sharia_compliant"`
+	Availability    GeoAvailability  `json:"availability"`
+	BaseRulesetIDs  []string         `json:"base_ruleset_ids,omitempty"`
+	Ruleset         []byte           `json:"ruleset,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
 }
 
-// Archetype groups related products within a family.
-type Archetype struct {
-	ID          string            `json:"id" db:"id"`
-	FamilyID    string            `json:"family_id" db:"family_id"`
-	Name        map[string]string `json:"name" db:"name"`
-	Description map[string]string `json:"description" db:"description"`
-	Ruleset     []byte            `json:"ruleset,omitempty" db:"ruleset"`
-	BaseRulesetIDs []string       `json:"base_ruleset_ids,omitempty" db:"base_ruleset_ids"`
-	CreatedAt   time.Time         `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at" db:"updated_at"`
-}
-
-// Product is a subscribable offering in the catalogue.
-type Product struct {
-	ID              string            `json:"id" db:"id"`
-	ArchetypeID     string            `json:"archetype_id" db:"archetype_id"`
-	Name            map[string]string `json:"name" db:"name"`
-	Description     map[string]string `json:"description" db:"description"`
-	Tagline         map[string]string `json:"tagline,omitempty" db:"tagline"`
-	Status          ProductStatus     `json:"status" db:"status"`
-	ProductType     ProductType       `json:"product_type" db:"product_type"`
-	CurrencyCode    string            `json:"currency_code" db:"currency_code"`
-	ParentProductID *string           `json:"parent_product_id,omitempty" db:"parent_product_id"`
-	Provider        RegulatoryProvider `json:"provider" db:"provider"`
-	EffectiveFrom   *time.Time        `json:"effective_from,omitempty" db:"effective_from"`
-	EffectiveTo     *time.Time        `json:"effective_to,omitempty" db:"effective_to"`
-	Compliance      ComplianceConfig   `json:"compliance" db:"compliance"`
-	Eligibility     EligibilityConfig  `json:"eligibility" db:"eligibility"`
-	CreatedAt       time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at" db:"updated_at"`
-	CreatedBy       string             `json:"created_by" db:"created_by"`
-}
-
-// ─── Geography & Compliance ───
-
-type RegulatoryProvider struct {
-	ProviderID        string `json:"provider_id" db:"provider_id"`
-	Name              string `json:"name" db:"name"`
-	Regulator         string `json:"regulator" db:"regulator"`
-	LicenseNumber     string `json:"license_number" db:"license_number"`
-	RegulatoryCountry string `json:"regulatory_country" db:"regulatory_country"`
-}
-
-type GeographicAvailability struct {
-	Mode         AvailabilityMode `json:"mode" db:"mode"`
-	CountryCodes []string         `json:"country_codes,omitempty" db:"country_codes"`
-}
-
-type ComplianceConfig struct {
-	ShariaCompliant bool             `json:"sharia_compliant" db:"sharia_compliant"`
-	Agreements      []LegalAgreement `json:"agreements,omitempty"`
-}
-
-type LegalAgreement struct {
-	ID            string        `json:"id" db:"id"`
-	ProductID     string        `json:"product_id" db:"product_id"`
-	AgreementType AgreementType `json:"agreement_type" db:"agreement_type"`
-	Title         map[string]string `json:"title" db:"title"`
-	Version       string        `json:"version" db:"version"`
-	DocumentRef   string        `json:"document_ref" db:"document_ref"`
-	Shared        bool          `json:"shared" db:"shared"`
-}
-
-// ─── Eligibility ───
-
-type EligibilityConfig struct {
-	Geographic     GeographicAvailability `json:"geographic" db:"geographic"`
-	Ruleset        []byte                 `json:"ruleset,omitempty" db:"ruleset"`
-	BaseRulesetIDs []string               `json:"base_ruleset_ids,omitempty" db:"base_ruleset_ids"`
-	AcceptableIDs  []AcceptableIDConfig   `json:"acceptable_ids,omitempty"`
-	Segments       []CustomerSegment      `json:"segments,omitempty"`
-}
-
-type AcceptableIDConfig struct {
-	IDTypeID          string   `json:"id_type_id" db:"id_type_id"`
-	IsCategoryWildcard bool    `json:"is_category_wildcard" db:"is_category_wildcard"`
-	IssuingGeoFilter  []string `json:"issuing_geo_filter,omitempty" db:"issuing_geo_filter"`
-}
-
-type CustomerSegment struct {
-	SegmentID    string       `json:"segment_id" db:"segment_id"`
-	CustomerType CustomerType `json:"customer_type" db:"customer_type"`
+// GeoAvailability defines geographic availability.
+type GeoAvailability struct {
+	Mode         AvailabilityMode `json:"mode"`
+	CountryCodes []string         `json:"country_codes,omitempty"`
 }
 
 // BaseRuleset is a reusable eval engine ruleset.
 type BaseRuleset struct {
-	ID          string    `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Description string    `json:"description" db:"description"`
-	Content     []byte    `json:"content" db:"content"`
-	Version     string    `json:"version" db:"version"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Content     []byte    `json:"content"`
+	Version     string    `json:"version"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // ─── Subscription Types ───
 
 // Subscription is a customer's instance of a product.
 type Subscription struct {
-	ID                   string             `json:"id" db:"id"`
-	ProductID            string             `json:"product_id" db:"product_id"`
-	EntityID             string             `json:"entity_id" db:"entity_id"`
-	EntityType           EntityType         `json:"entity_type" db:"entity_type"`
-	Status               SubscriptionStatus `json:"status" db:"status"`
-	SigningAuthority     SigningAuthority    `json:"signing_authority" db:"signing_authority"`
-	ParentSubscriptionID *string            `json:"parent_subscription_id,omitempty" db:"parent_subscription_id"`
-	ExternalRef          *string            `json:"external_ref,omitempty" db:"external_ref"`
-	Disabled             *DisabledState     `json:"disabled,omitempty"`
-	EvalState            *EvalState         `json:"eval_state,omitempty"`
-	Parties              []Party            `json:"parties,omitempty"`
-	Capabilities         []Capability       `json:"capabilities,omitempty"`
-	CreatedAt            time.Time          `json:"created_at" db:"created_at"`
-	ActivatedAt          *time.Time         `json:"activated_at,omitempty" db:"activated_at"`
-	CanceledAt           *time.Time         `json:"canceled_at,omitempty" db:"canceled_at"`
+	ID           string             `json:"id"`
+	ProductID    string             `json:"product_id"`
+	EntityID     string             `json:"entity_id"`
+	EntityType   EntityType         `json:"entity_type"`
+	Status       SubscriptionStatus `json:"status"`
+	SigningRule   SigningRule        `json:"signing_rule"`
+	RequiredCount int               `json:"required_count"`
+	ExternalRef  string             `json:"external_ref,omitempty"`
+	Disabled     *DisabledState     `json:"disabled,omitempty"`
+	Parties      []Party            `json:"parties,omitempty"`
+	Capabilities []Capability       `json:"capabilities,omitempty"`
+	CreatedAt    time.Time          `json:"created_at"`
+	ActivatedAt  *time.Time         `json:"activated_at,omitempty"`
+	CanceledAt   *time.Time         `json:"canceled_at,omitempty"`
 }
 
-type SigningAuthority struct {
-	Rule          SigningRule                `json:"rule" db:"rule"`
-	RequiredCount int                       `json:"required_count" db:"required_count"`
-	Overrides     []CapabilitySigningOverride `json:"overrides,omitempty"`
-}
-
-type CapabilitySigningOverride struct {
-	CapabilityType CapabilityType `json:"capability_type"`
-	Rule           SigningRule    `json:"rule"`
-	RequiredCount  int            `json:"required_count"`
-}
-
+// Party represents a person's role on a subscription.
 type Party struct {
-	ID              string         `json:"id" db:"id"`
-	SubscriptionID  string         `json:"subscription_id" db:"subscription_id"`
-	CustomerID      string         `json:"customer_id" db:"customer_id"`
-	Role            PartyRole      `json:"role" db:"role"`
-	RequirementsMet bool           `json:"requirements_met" db:"requirements_met"`
+	ID              string         `json:"id"`
+	CustomerID      string         `json:"customer_id"`
+	Role            PartyRole      `json:"role"`
+	RequirementsMet bool           `json:"requirements_met"`
 	Disabled        *DisabledState `json:"disabled,omitempty"`
-	EvalState       *EvalState     `json:"eval_state,omitempty"`
-	AddedAt         time.Time      `json:"added_at" db:"added_at"`
-	RemovedAt       *time.Time     `json:"removed_at,omitempty" db:"removed_at"`
 }
 
+// Capability represents a product feature that can be independently controlled.
 type Capability struct {
-	ID             string           `json:"id" db:"id"`
-	SubscriptionID string           `json:"subscription_id" db:"subscription_id"`
-	CapabilityType CapabilityType   `json:"capability_type" db:"capability_type"`
-	Status         CapabilityStatus `json:"status" db:"status"`
+	ID             string           `json:"id"`
+	CapabilityType CapabilityType   `json:"capability_type"`
+	Status         CapabilityStatus `json:"status"`
 	Disabled       *DisabledState   `json:"disabled,omitempty"`
 }
 
+// DisabledState explains why something is disabled.
 type DisabledState struct {
-	Disabled          bool           `json:"disabled" db:"disabled"`
-	Reason            DisabledReason `json:"reason" db:"reason"`
-	Message           string         `json:"message" db:"message"`
-	DisabledAt        *time.Time     `json:"disabled_at,omitempty" db:"disabled_at"`
-	FailedEvaluations []string       `json:"failed_evaluations,omitempty" db:"failed_evaluations"`
-	CausedByPartyID   *string        `json:"caused_by_party_id,omitempty" db:"caused_by_party_id"`
+	Disabled          bool           `json:"disabled"`
+	Reason            DisabledReason `json:"reason"`
+	Message           string         `json:"message"`
+	DisabledAt        *time.Time     `json:"disabled_at,omitempty"`
+	FailedEvaluations []string       `json:"failed_evaluations,omitempty"`
 }
 
-type EvalState struct {
-	OverallStatus EvalStatus   `json:"overall_status" db:"overall_status"`
-	Results       []EvalResult `json:"results,omitempty"`
-	Deferred      []string     `json:"deferred,omitempty"`
-	EvaluatedAt   *time.Time   `json:"evaluated_at,omitempty" db:"evaluated_at"`
-	LayerIDs      []string     `json:"layer_ids,omitempty" db:"layer_ids"`
+// ─── Evaluation Types ───
+
+// EvaluationResult is the output of an eligibility evaluation.
+type EvaluationResult struct {
+	ProductID    string             `json:"product_id"`
+	Verdict      EligibilityVerdict `json:"verdict"`
+	Requirements []RequirementResult `json:"requirements"`
+	ResolvedAt   time.Time          `json:"resolved_at"`
 }
 
-type EvalResult struct {
-	Name               string `json:"name"`
-	Passed             bool   `json:"passed"`
-	Category           string `json:"category"`
-	Severity           string `json:"severity"`
-	Resolution         string `json:"resolution,omitempty"`
-	ResolutionWorkflow string `json:"resolution_workflow,omitempty"`
+// RequirementResult is the outcome of a single evaluation rule.
+type RequirementResult struct {
+	Name        string            `json:"name"`
+	Status      RequirementStatus `json:"status"`
+	FailureMode FailureMode       `json:"failure_mode"`
+	Category    string            `json:"category"`
+	Severity    string            `json:"severity"`
+	Resolution  string            `json:"resolution,omitempty"`
 }
 
-// ─── Ruleset Validation ───
+// ResolvedRuleset is the merged ruleset for a product.
+type ResolvedRuleset struct {
+	ProductID  string         `json:"product_id"`
+	Merged     []byte         `json:"merged"`
+	Layers     []RulesetLayer `json:"layers"`
+}
 
-type RulesetValidation struct {
-	Valid           bool     `json:"valid"`
-	Errors          []string `json:"errors,omitempty"`
-	Warnings        []string `json:"warnings,omitempty"`
-	EvaluationCount int      `json:"evaluation_count"`
-	MaxDepth        int      `json:"max_depth"`
+// RulesetLayer identifies one component of a merged ruleset.
+type RulesetLayer struct {
+	Source   string `json:"source"` // "base" or "product"
+	SourceID string `json:"source_id"`
 }

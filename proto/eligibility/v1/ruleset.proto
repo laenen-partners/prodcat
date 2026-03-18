@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+import "entitystore/v1/options.proto";
+
+// Ruleset is a reusable eval engine ruleset (YAML content).
+message Ruleset {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    extraction_display_name: "Ruleset"
+  };
+
+  string ruleset_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+    normalizer: NORMALIZER_LOWERCASE_TRIM
+  }];
+
+  string name = 2 [(entitystore.v1.field) = {
+    embed: true
+    token_field: true
+  }];
+
+  string description = 3 [(entitystore.v1.field) = {
+    embed: true
+  }];
+
+  string version = 4;
+  bytes content = 5;
+}

@@ -1,0 +1,98 @@
+# CASA Current Account — UAE
+# AED current account for UAE residents, Sharia-compliant.
+# Requires: platform access (Mal), age 18+, valid passport, UAE Pass verified.
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: base-age-gate-18
+    name: Age Gate 18+
+    description: Requires the customer to be at least 18 years old
+    version: "0.0.1"
+    evaluations:
+      - name: age_18_plus
+        expression: "input.age >= 18"
+        writes: age_eligible
+        severity: blocking
+        category: eligibility
+        failure_mode: definitive
+        resolution: "You must be at least 18 years old"
+
+  - id: base-uae-residence
+    name: UAE Residence
+    description: Requires UAE residency
+    version: "0.0.1"
+    evaluations:
+      - name: uae_resident
+        expression: "input.country_of_residence == 'AE'"
+        writes: uae_resident
+        severity: blocking
+        category: eligibility
+        failure_mode: definitive
+        resolution: "This product is only available to UAE residents"
+
+  - id: casa-current-account-uae
+    name: CASA Current Account UAE Rules
+    description: Product-specific rules for UAE current account
+    version: "0.0.1"
+    evaluations:
+      - name: valid_passport
+        expression: "input.id_documents.exists(d, d.document_type == 'passport' && d.verified && !d.expired)"
+        writes: valid_passport
+        severity: blocking
+        category: identity
+        failure_mode: input_required
+        resolution: "Please upload a valid passport"
+
+      - name: uae_pass_verified
+        expression: "input.id_documents.exists(d, d.document_type == 'uae_pass' && d.verified)"
+        writes: uae_pass_verified
+        severity: blocking
+        category: identity
+        failure_mode: actionable
+        resolution: "Please complete UAE Pass verification"
+
+      - name: casa_tc_accepted
+        expression: "input.agreements.exists(a, a.type == 'casa_terms_and_conditions' && a.accepted)"
+        writes: casa_tc_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the current account terms and conditions"
+
+      - name: casa_uae_ready
+        expression: "age_eligible && uae_resident && valid_passport && uae_pass_verified && casa_tc_accepted"
+        reads:
+          - age_eligible
+          - uae_resident
+          - valid_passport
+          - uae_pass_verified
+          - casa_tc_accepted
+        writes: casa_uae_ready
+        severity: blocking
+        category: readiness
+
+products:
+  - product_id: casa-current-account-uae
+    name: Current Account (AED)
+    description: Sharia-compliant AED current account for UAE residents
+    tags:
+      - "family:casa"
+      - "type:current_account"
+      - "market:uae"
+      - "currency:aed"
+      - "sharia:true"
+      - "segment:retail"
+    status: active
+    currency_code: AED
+    sharia_compliant: true
+    availability:
+      mode: specific_countries
+      country_codes:
+        - AE
+    base_ruleset_ids:
+      - base-platform-access
+      - base-age-gate-18
+      - base-uae-residence
+      - casa-current-account-uae

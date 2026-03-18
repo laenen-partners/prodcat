@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package eligibility.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/eligibility/v1;eligibilityv1";
+
+import "entitystore/v1/options.proto";
+
+// Party represents a person's role on a subscription.
+message Party {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    extraction_display_name: "Party"
+  };
+
+  string party_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+  }];
+
+  string customer_id = 2;
+  string role = 3;
+  bool requirements_met = 4;
+  bool disabled = 5;
+  string disabled_reason = 6;
+}
