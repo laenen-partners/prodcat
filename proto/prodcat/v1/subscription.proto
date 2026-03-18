@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package prodcat.v1;
+
+option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Subscription is a customer's instance of a product.
+// Modelled after Stripe: a top-level status plus granular capability states,
+// each independently disabled with a reason and resolution path.
+message Subscription {
+  string subscription_id = 1;
+  string customer_id = 2;
+  string product_id = 3;
+
+  // Top-level status.
+  SubscriptionStatus status = 4;
+
+  // Granular capability states — each can be independently disabled.
+  // e.g., "transfers" disabled because Emirates ID expired,
+  //        "view_balance" still enabled.
+  repeated Capability capabilities = 5;
+
+  // Current eval engine state.
+  EvalState eval_state = 6;
+
+  // For supplementary products: the parent subscription.
+  string parent_subscription_id = 7;
+
+  // External reference in the core banking system.
+  string external_ref = 8;
+
+  // Lifecycle timestamps.
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp activated_at = 11;
+  google.protobuf.Timestamp canceled_at = 12;
+
+  // Disabled state at the subscription level (Stripe-style).
+  // When set, the entire subscription is disabled regardless of capability states.
+  DisabledState disabled = 13;
+}
+
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  // Onboarding in progress, requirements not yet met.
+  SUBSCRIPTION_STATUS_INCOMPLETE = 1;
+  // All requirements met, product is live.
+  SUBSCRIPTION_STATUS_ACTIVE = 2;
+  // Past due — one or more data elements have expired (grace period).
+  SUBSCRIPTION_STATUS_PAST_DUE = 3;
+  // Canceled by customer or operations.
+  SUBSCRIPTION_STATUS_CANCELED = 4;
+}
+
+// DisabledState — Stripe-style "disabled" with a reason.
+// Applied at the subscription level or at individual capability level.
+message DisabledState {
+  bool disabled = 1;
+  DisabledReason reason = 2;
+  // Human-readable explanation.
+  string message = 3;
+  // When this was disabled.
+  google.protobuf.Timestamp disabled_at = 4;
+  // Eval results that caused the disable (if driven by the eval engine).
+  repeated string failed_evaluations = 5;
+}
+
+enum DisabledReason {
+  DISABLED_REASON_UNSPECIFIED = 0;
+  // Eligibility requirement not met or expired.
+  DISABLED_REASON_REQUIREMENTS_NOT_MET = 1;
+  // Document or data element has expired.
+  DISABLED_REASON_EXPIRED_DATA = 2;
+  // Failed re-evaluation (e.g., risk score changed).
+  DISABLED_REASON_FAILED_EVALUATION = 3;
+  // Regulatory hold (compliance/AML/sanctions).
+  DISABLED_REASON_REGULATORY_HOLD = 4;
+  // Fraud suspicion.
+  DISABLED_REASON_FRAUD_SUSPICION = 5;
+  // Customer requested.
+  DISABLED_REASON_CUSTOMER_REQUESTED = 6;
+  // Operations / manual action.
+  DISABLED_REASON_OPERATIONS = 7;
+  // Parent subscription is disabled (cascade from primary product).
+  DISABLED_REASON_PARENT_DISABLED = 8;
+}
+
+// Capability represents a specific feature of the product that can be
+// independently enabled/disabled. Analogous to Stripe's capability model.
+message Capability {
+  string capability_id = 1;
+  CapabilityType capability_type = 2;
+
+  // Whether this capability is currently active.
+  CapabilityStatus status = 3;
+
+  // If not active, why — and what to do about it.
+  DisabledState disabled = 4;
+
+  // Requirements specific to this capability (from the eval engine).
+  // e.g., "international_transfers" might require additional KYC beyond
+  // what the base product requires.
+  repeated EvalResult requirements = 5;
+}
+
+enum CapabilityType {
+  CAPABILITY_TYPE_UNSPECIFIED = 0;
+  // Can view balances and transaction history.
+  CAPABILITY_TYPE_VIEW = 1;
+  // Can make domestic transfers.
+  CAPABILITY_TYPE_DOMESTIC_TRANSFERS = 2;
+  // Can make international transfers.
+  CAPABILITY_TYPE_INTERNATIONAL_TRANSFERS = 3;
+  // Can use the debit card.
+  CAPABILITY_TYPE_CARD_PAYMENTS = 4;
+  // Can withdraw from ATM.
+  CAPABILITY_TYPE_ATM = 5;
+  // Can receive incoming payments.
+  CAPABILITY_TYPE_RECEIVE = 6;
+  // Can use bill payments.
+  CAPABILITY_TYPE_BILL_PAYMENTS = 7;
+  // Can use FX / currency conversion.
+  CAPABILITY_TYPE_FX = 8;
+  // Can set up standing orders / recurring.
+  CAPABILITY_TYPE_STANDING_ORDERS = 9;
+  // Custom capability (use capability_id for details).
+  CAPABILITY_TYPE_CUSTOM = 99;
+}
+
+enum CapabilityStatus {
+  CAPABILITY_STATUS_UNSPECIFIED = 0;
+  CAPABILITY_STATUS_ACTIVE = 1;
+  CAPABILITY_STATUS_DISABLED = 2;
+  // Pending — requirements exist but not yet evaluated/completed.
+  CAPABILITY_STATUS_PENDING = 3;
+}
+
+// EvalState captures the eval engine's last evaluation for this subscription.
+message EvalState {
+  EvalStatus overall_status = 1;
+  repeated EvalResult results = 2;
+  repeated string deferred = 3;
+  google.protobuf.Timestamp evaluated_at = 4;
+  repeated string layer_ids = 5;
+}
+
+enum EvalStatus {
+  EVAL_STATUS_UNSPECIFIED = 0;
+  EVAL_STATUS_ALL_PASSED = 1;
+  EVAL_STATUS_WORKFLOW_ACTIVE = 2;
+  EVAL_STATUS_ACTION_REQUIRED = 3;
+  EVAL_STATUS_BLOCKED = 4;
+}
+
+// EvalResult is a single evaluation outcome from the eval engine.
+message EvalResult {
+  string name = 1;
+  bool passed = 2;
+  string category = 3;
+  string severity = 4;
+  string resolution = 5;
+  string resolution_workflow = 6;
+}

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package prodcat.v1;
+
+option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
+
+import "google/protobuf/timestamp.proto";
+
+// LocalizedText supports multi-language content.
+message LocalizedText {
+  // BCP 47 language tag (e.g., "en", "ar", "fr").
+  string locale = 1;
+  string value = 2;
+}
+
+// DateRange represents a period with optional start and end.
+message DateRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}

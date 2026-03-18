@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package prodcat.v1;
+
+option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
+
+// GeographicAvailability defines where a product can be offered.
+message GeographicAvailability {
+  AvailabilityMode mode = 1;
+
+  // ISO 3166-1 alpha-2 country codes. Interpretation depends on mode:
+  //   SPECIFIC_COUNTRIES → inclusion list
+  //   GLOBAL_EXCEPT      → exclusion list
+  //   GLOBAL             → ignored
+  repeated string country_codes = 2;
+
+  // Optional: restrict to specific regions/emirates within countries.
+  // e.g., for UAE products only available in certain emirates.
+  repeated RegionRestriction region_restrictions = 3;
+}
+
+enum AvailabilityMode {
+  AVAILABILITY_MODE_UNSPECIFIED = 0;
+  // Available only in listed countries.
+  AVAILABILITY_MODE_SPECIFIC_COUNTRIES = 1;
+  // Available everywhere.
+  AVAILABILITY_MODE_GLOBAL = 2;
+  // Available everywhere except listed countries.
+  AVAILABILITY_MODE_GLOBAL_EXCEPT = 3;
+}
+
+// RegionRestriction narrows availability within a country.
+message RegionRestriction {
+  // ISO 3166-1 alpha-2 country code.
+  string country_code = 1;
+  // ISO 3166-2 subdivision codes (e.g., "AE-DU" for Dubai).
+  repeated string subdivision_codes = 2;
+}
+
+// RegulatoryProvider is the licensed entity offering the product.
+message RegulatoryProvider {
+  string provider_id = 1;
+  string name = 2;
+  // Regulatory body (e.g., "CBUAE", "OCC", "FCA").
+  string regulator = 3;
+  // License reference number.
+  string license_number = 4;
+  // Country where the provider is regulated.
+  string regulatory_country = 5;
+}
