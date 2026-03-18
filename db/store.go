@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/laenen-partners/migrate"
@@ -48,7 +49,11 @@ func New(opts ...Option) (*Store, error) {
 
 // Migrate runs all pending database migrations.
 func (s *Store) Migrate(ctx context.Context) error {
-	return migrate.Up(ctx, s.pool, migrations, migrationScope)
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return fmt.Errorf("migrations fs: %w", err)
+	}
+	return migrate.Up(ctx, s.pool, sub, migrationScope)
 }
 
 // Ensure Store implements both interfaces.
