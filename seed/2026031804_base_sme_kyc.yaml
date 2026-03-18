@@ -1,0 +1,130 @@
+# Base SME KYC — reusable ruleset for SME/corporate products.
+# Covers entity verification, UBO identification, trade license,
+# and screening for all parties (signatories, directors, UBOs).
+
+kind: seed
+version: "1.0"
+
+rulesets:
+  - id: base-sme-entity-verification
+    name: SME Entity Verification
+    description: Business entity verification and trade license checks
+    version: "0.0.1"
+    evaluations:
+      - name: incorporation_verified
+        expression: "input.business_entity != null && input.business_entity.incorporation_verified"
+        writes: incorporation_verified
+        severity: blocking
+        category: kyc
+        failure_mode: input_required
+        resolution: "Please provide incorporation/registration documents"
+
+      - name: trade_license_valid
+        expression: "input.business_entity != null && input.business_entity.trade_license_valid"
+        writes: trade_license_valid
+        severity: blocking
+        category: kyc
+        failure_mode: input_required
+        resolution: "Please provide a valid trade license"
+
+  - id: base-sme-ubo
+    name: SME UBO Identification
+    description: UBO identification and verification requirements
+    version: "0.0.1"
+    evaluations:
+      - name: ubo_identified
+        expression: "input.parties.exists(p, p.role == 5)"
+        writes: ubo_identified
+        severity: blocking
+        category: kyc
+        failure_mode: input_required
+        resolution: "Please identify all Ultimate Beneficial Owners (UBOs)"
+
+      - name: ubo_id_verified
+        expression: "input.parties.filter(p, p.role == 5).all(p, p.id_documents.exists(d, d.verified && !d.expired))"
+        writes: ubo_id_verified
+        severity: blocking
+        category: identity
+        failure_mode: input_required
+        resolution: "Please upload identity documents for all UBOs"
+
+  - id: base-sme-signatory
+    name: SME Authorised Signatory
+    description: Authorised signatory verification requirements
+    version: "0.0.1"
+    evaluations:
+      - name: signatory_identified
+        expression: "input.parties.exists(p, p.role == 3)"
+        writes: signatory_identified
+        severity: blocking
+        category: kyc
+        failure_mode: input_required
+        resolution: "Please identify at least one authorised signatory"
+
+      - name: signatory_id_verified
+        expression: "input.parties.filter(p, p.role == 3).all(p, p.id_documents.exists(d, d.verified && !d.expired))"
+        writes: signatory_id_verified
+        severity: blocking
+        category: identity
+        failure_mode: input_required
+        resolution: "Please upload identity documents for all authorised signatories"
+
+  - id: base-sme-screening
+    name: SME Screening
+    description: PEP, sanctions screening for the business entity and all key parties
+    version: "0.0.1"
+    evaluations:
+      - name: entity_sanctions_clear
+        expression: "input.parties.filter(p, p.role == 3 || p.role == 4 || p.role == 5).all(p, p.kyc.sanctions_screening_clear)"
+        writes: entity_sanctions_clear
+        severity: blocking
+        category: kyc
+        failure_mode: manual_review
+        resolution: "Pending sanctions screening for key parties"
+
+      - name: entity_pep_clear
+        expression: "input.parties.filter(p, p.role == 3 || p.role == 4 || p.role == 5).all(p, p.kyc.pep_screening_clear)"
+        writes: entity_pep_clear
+        severity: blocking
+        category: kyc
+        failure_mode: manual_review
+        resolution: "Pending PEPs screening for key parties"
+
+  - id: base-sme-source-of-funds
+    name: SME Source of Funds
+    description: Source of funds/wealth verification for the business
+    version: "0.0.1"
+    evaluations:
+      - name: business_source_of_funds
+        expression: "input.parties.exists(p, p.role == 1 && p.kyc.source_of_funds_verified)"
+        writes: business_source_of_funds_verified
+        severity: blocking
+        category: kyc
+        failure_mode: input_required
+        resolution: "Please provide source of funds documentation"
+
+  - id: base-sme-full-kyc
+    name: SME Full KYC Gate
+    description: Composite gate that requires all SME KYC checks to pass
+    version: "0.0.1"
+    evaluations:
+      - name: sme_kyc_complete
+        expression: >
+          incorporation_verified && trade_license_valid &&
+          ubo_identified && ubo_id_verified &&
+          signatory_identified && signatory_id_verified &&
+          entity_sanctions_clear && entity_pep_clear &&
+          business_source_of_funds_verified
+        reads:
+          - incorporation_verified
+          - trade_license_valid
+          - ubo_identified
+          - ubo_id_verified
+          - signatory_identified
+          - signatory_id_verified
+          - entity_sanctions_clear
+          - entity_pep_clear
+          - business_source_of_funds_verified
+        writes: sme_kyc_complete
+        severity: blocking
+        category: readiness

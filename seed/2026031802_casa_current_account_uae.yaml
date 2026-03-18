@@ -95,4 +95,9 @@ products:
       - base-platform-access
       - base-age-gate-18
       - base-uae-residence
+      - base-retail-idv
+      - base-retail-screening
+      - base-retail-address
+      - base-retail-tax
+      - base-retail-full-kyc
       - casa-current-account-uae
