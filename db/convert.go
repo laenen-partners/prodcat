@@ -1,13 +1,13 @@
-package postgres
+package db
 
 import (
 	"github.com/laenen-partners/prodcat"
-	"github.com/laenen-partners/prodcat/postgres/db"
+	gen "github.com/laenen-partners/prodcat/db/gen"
 )
 
 // Row-to-domain converters. These map SQLC-generated types back to prodcat types.
 
-func familyFromRow(row db.Family) prodcat.FamilyDefinition {
+func familyFromRow(row gen.Family) prodcat.FamilyDefinition {
 	return prodcat.FamilyDefinition{
 		ID:             row.ID,
 		Family:         prodcat.ProductFamily(row.Family),
@@ -20,7 +20,7 @@ func familyFromRow(row db.Family) prodcat.FamilyDefinition {
 	}
 }
 
-func archetypeFromRow(row db.Archetype) prodcat.Archetype {
+func archetypeFromRow(row gen.Archetype) prodcat.Archetype {
 	return prodcat.Archetype{
 		ID:             row.ID,
 		FamilyID:       row.FamilyID,
@@ -33,7 +33,7 @@ func archetypeFromRow(row db.Archetype) prodcat.Archetype {
 	}
 }
 
-func productFromRow(row db.Product) prodcat.Product {
+func productFromRow(row gen.Product) prodcat.Product {
 	return prodcat.Product{
 		ID:          row.ID,
 		ArchetypeID: row.ArchetypeID,
@@ -70,7 +70,7 @@ func productFromRow(row db.Product) prodcat.Product {
 	}
 }
 
-func baseRulesetFromRow(row db.BaseRuleset) prodcat.BaseRuleset {
+func baseRulesetFromRow(row gen.BaseRuleset) prodcat.BaseRuleset {
 	return prodcat.BaseRuleset{
 		ID:          row.ID,
 		Name:        row.Name,
@@ -82,7 +82,7 @@ func baseRulesetFromRow(row db.BaseRuleset) prodcat.BaseRuleset {
 	}
 }
 
-func subscriptionFromRow(row db.Subscription) prodcat.Subscription {
+func subscriptionFromRow(row gen.Subscription) prodcat.Subscription {
 	sub := prodcat.Subscription{
 		ID:                   row.ID,
 		ProductID:            row.ProductID,
@@ -110,7 +110,7 @@ func subscriptionFromRow(row db.Subscription) prodcat.Subscription {
 	return sub
 }
 
-func partyFromRow(row db.Party) prodcat.Party {
+func partyFromRow(row gen.Party) prodcat.Party {
 	p := prodcat.Party{
 		ID:              row.ID,
 		SubscriptionID:  row.SubscriptionID,
@@ -131,7 +131,7 @@ func partyFromRow(row db.Party) prodcat.Party {
 	return p
 }
 
-func capabilityFromRow(row db.Capability) prodcat.Capability {
+func capabilityFromRow(row gen.Capability) prodcat.Capability {
 	c := prodcat.Capability{
 		ID:             row.ID,
 		SubscriptionID: row.SubscriptionID,

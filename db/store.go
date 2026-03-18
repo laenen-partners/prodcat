@@ -1,5 +1,5 @@
-// Package postgres implements the prodcat services using PostgreSQL.
-package postgres
+// Package db implements the prodcat services using PostgreSQL.
+package db
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/laenen-partners/migrate"
 	"github.com/laenen-partners/prodcat"
-	"github.com/laenen-partners/prodcat/postgres/db"
+	gen "github.com/laenen-partners/prodcat/db/gen"
 )
 
 //go:embed migrations/*.sql
@@ -20,7 +20,7 @@ const migrationScope = "prodcat"
 // Store implements prodcat.CatalogService and prodcat.SubscriptionService.
 type Store struct {
 	pool    *pgxpool.Pool
-	queries *db.Queries
+	queries *gen.Queries
 }
 
 // Option configures the Store.
@@ -42,7 +42,7 @@ func New(opts ...Option) (*Store, error) {
 	if s.pool == nil {
 		return nil, fmt.Errorf("prodcat/postgres: pool is required, use WithPool()")
 	}
-	s.queries = db.New(s.pool)
+	s.queries = gen.New(s.pool)
 	return s, nil
 }
 
@@ -60,9 +60,9 @@ var (
 // ─── CatalogService: Families ───
 
 func (s *Store) CreateFamily(ctx context.Context, f prodcat.FamilyDefinition) (prodcat.FamilyDefinition, error) {
-	row, err := s.queries.CreateFamily(ctx, db.CreateFamilyParams{
+	row, err := s.queries.CreateFamily(ctx, gen.CreateFamilyParams{
 		ID:             f.ID,
-		Family:         db.ProductFamily(f.Family),
+		Family:         gen.ProductFamily(f.Family),
 		Name:           f.Name,
 		Description:    f.Description,
 		Ruleset:        f.Ruleset,
@@ -95,7 +95,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]prodcat.FamilyDefinition, e
 }
 
 func (s *Store) UpdateFamily(ctx context.Context, f prodcat.FamilyDefinition) (prodcat.FamilyDefinition, error) {
-	row, err := s.queries.UpdateFamily(ctx, db.UpdateFamilyParams{
+	row, err := s.queries.UpdateFamily(ctx, gen.UpdateFamilyParams{
 		ID:             f.ID,
 		Name:           f.Name,
 		Description:    f.Description,
@@ -111,7 +111,7 @@ func (s *Store) UpdateFamily(ctx context.Context, f prodcat.FamilyDefinition) (p
 // ─── CatalogService: Archetypes ───
 
 func (s *Store) CreateArchetype(ctx context.Context, a prodcat.Archetype) (prodcat.Archetype, error) {
-	row, err := s.queries.CreateArchetype(ctx, db.CreateArchetypeParams{
+	row, err := s.queries.CreateArchetype(ctx, gen.CreateArchetypeParams{
 		ID:             a.ID,
 		FamilyID:       a.FamilyID,
 		Name:           a.Name,
@@ -146,7 +146,7 @@ func (s *Store) ListArchetypes(ctx context.Context, familyID string) ([]prodcat.
 }
 
 func (s *Store) UpdateArchetype(ctx context.Context, a prodcat.Archetype) (prodcat.Archetype, error) {
-	row, err := s.queries.UpdateArchetype(ctx, db.UpdateArchetypeParams{
+	row, err := s.queries.UpdateArchetype(ctx, gen.UpdateArchetypeParams{
 		ID:             a.ID,
 		Name:           a.Name,
 		Description:    a.Description,
@@ -162,18 +162,18 @@ func (s *Store) UpdateArchetype(ctx context.Context, a prodcat.Archetype) (prodc
 // ─── CatalogService: Products ───
 
 func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product) (prodcat.Product, error) {
-	row, err := s.queries.CreateProduct(ctx, db.CreateProductParams{
+	row, err := s.queries.CreateProduct(ctx, gen.CreateProductParams{
 		ID:              p.ID,
 		ArchetypeID:     p.ArchetypeID,
 		Name:            p.Name,
 		Description:     p.Description,
 		Tagline:         p.Tagline,
-		Status:          db.ProductStatus(p.Status),
-		ProductType:     db.ProductType(p.ProductType),
+		Status:          gen.ProductStatus(p.Status),
+		ProductType:     gen.ProductType(p.ProductType),
 		CurrencyCode:    p.CurrencyCode,
 		ParentProductID: p.ParentProductID,
 		ShariaCompliant: p.Compliance.ShariaCompliant,
-		AvailabilityMode: db.AvailabilityMode(p.Eligibility.Geographic.Mode),
+		AvailabilityMode: gen.AvailabilityMode(p.Eligibility.Geographic.Mode),
 		CountryCodes:    p.Eligibility.Geographic.CountryCodes,
 		Ruleset:         p.Eligibility.Ruleset,
 		BaseRulesetIds:  p.Eligibility.BaseRulesetIDs,
@@ -201,7 +201,7 @@ func (s *Store) GetProduct(ctx context.Context, id string) (prodcat.Product, err
 }
 
 func (s *Store) ListProducts(ctx context.Context, filter prodcat.ProductFilter) ([]prodcat.Product, error) {
-	rows, err := s.queries.ListProducts(ctx, db.ListProductsParams{
+	rows, err := s.queries.ListProducts(ctx, gen.ListProductsParams{
 		ArchetypeID:  nilIfEmpty(filter.ArchetypeID),
 		FamilyID:     nilIfEmpty(filter.FamilyID),
 		Status:       nilIfEmpty(string(filter.Status)),
@@ -221,14 +221,14 @@ func (s *Store) ListProducts(ctx context.Context, filter prodcat.ProductFilter) 
 }
 
 func (s *Store) UpdateProduct(ctx context.Context, p prodcat.Product) (prodcat.Product, error) {
-	row, err := s.queries.UpdateProduct(ctx, db.UpdateProductParams{
+	row, err := s.queries.UpdateProduct(ctx, gen.UpdateProductParams{
 		ID:              p.ID,
 		Name:            p.Name,
 		Description:     p.Description,
 		Tagline:         p.Tagline,
 		CurrencyCode:    p.CurrencyCode,
 		ShariaCompliant: p.Compliance.ShariaCompliant,
-		AvailabilityMode: db.AvailabilityMode(p.Eligibility.Geographic.Mode),
+		AvailabilityMode: gen.AvailabilityMode(p.Eligibility.Geographic.Mode),
 		CountryCodes:    p.Eligibility.Geographic.CountryCodes,
 		Ruleset:         p.Eligibility.Ruleset,
 		BaseRulesetIds:  p.Eligibility.BaseRulesetIDs,
@@ -242,9 +242,9 @@ func (s *Store) UpdateProduct(ctx context.Context, p prodcat.Product) (prodcat.P
 }
 
 func (s *Store) TransitionProductStatus(ctx context.Context, id string, target prodcat.ProductStatus, reason string) (prodcat.Product, error) {
-	row, err := s.queries.TransitionProductStatus(ctx, db.TransitionProductStatusParams{
+	row, err := s.queries.TransitionProductStatus(ctx, gen.TransitionProductStatusParams{
 		ID:     id,
-		Status: db.ProductStatus(target),
+		Status: gen.ProductStatus(target),
 	})
 	if err != nil {
 		return prodcat.Product{}, fmt.Errorf("transition product status: %w", err)
@@ -255,7 +255,7 @@ func (s *Store) TransitionProductStatus(ctx context.Context, id string, target p
 // ─── CatalogService: Base Rulesets ───
 
 func (s *Store) CreateBaseRuleset(ctx context.Context, r prodcat.BaseRuleset) (prodcat.BaseRuleset, prodcat.RulesetValidation, error) {
-	row, err := s.queries.CreateBaseRuleset(ctx, db.CreateBaseRulesetParams{
+	row, err := s.queries.CreateBaseRuleset(ctx, gen.CreateBaseRulesetParams{
 		ID:          r.ID,
 		Name:        r.Name,
 		Description: r.Description,
@@ -291,7 +291,7 @@ func (s *Store) ListBaseRulesets(ctx context.Context) ([]prodcat.BaseRuleset, er
 }
 
 func (s *Store) UpdateBaseRuleset(ctx context.Context, r prodcat.BaseRuleset) (prodcat.BaseRuleset, prodcat.RulesetValidation, error) {
-	row, err := s.queries.UpdateBaseRuleset(ctx, db.UpdateBaseRulesetParams{
+	row, err := s.queries.UpdateBaseRuleset(ctx, gen.UpdateBaseRulesetParams{
 		ID:          r.ID,
 		Name:        r.Name,
 		Description: r.Description,
@@ -308,7 +308,7 @@ func (s *Store) UpdateBaseRuleset(ctx context.Context, r prodcat.BaseRuleset) (p
 // ─── CatalogService: Discovery & Resolution ───
 
 func (s *Store) ListAvailableProducts(ctx context.Context, filter prodcat.AvailableProductFilter) ([]prodcat.Product, error) {
-	rows, err := s.queries.ListAvailableProducts(ctx, db.ListAvailableProductsParams{
+	rows, err := s.queries.ListAvailableProducts(ctx, gen.ListAvailableProductsParams{
 		CountryCode:  filter.CountryCode,
 		CustomerType: nilIfEmpty(string(filter.CustomerType)),
 		Family:       nilIfEmpty(string(filter.Family)),
@@ -339,11 +339,11 @@ func (s *Store) Subscribe(ctx context.Context, req prodcat.SubscribeRequest) (pr
 
 	qtx := s.queries.WithTx(tx)
 
-	sub, err := qtx.CreateSubscription(ctx, db.CreateSubscriptionParams{
+	sub, err := qtx.CreateSubscription(ctx, gen.CreateSubscriptionParams{
 		EntityID:       req.EntityID,
-		EntityType:     db.EntityType(req.EntityType),
+		EntityType:     gen.EntityType(req.EntityType),
 		ProductID:      req.ProductID,
-		SigningRule:     db.SigningRule(req.SigningAuthority.Rule),
+		SigningRule:     gen.SigningRule(req.SigningAuthority.Rule),
 		RequiredCount:  int32(req.SigningAuthority.RequiredCount),
 	})
 	if err != nil {
@@ -351,10 +351,10 @@ func (s *Store) Subscribe(ctx context.Context, req prodcat.SubscribeRequest) (pr
 	}
 
 	for _, pi := range req.InitialParties {
-		_, err := qtx.AddParty(ctx, db.AddPartyParams{
+		_, err := qtx.AddParty(ctx, gen.AddPartyParams{
 			SubscriptionID: sub.ID,
 			CustomerID:     pi.CustomerID,
-			Role:           db.PartyRole(pi.Role),
+			Role:           gen.PartyRole(pi.Role),
 		})
 		if err != nil {
 			return prodcat.Subscription{}, fmt.Errorf("add party: %w", err)
@@ -397,7 +397,7 @@ func (s *Store) GetSubscription(ctx context.Context, id string) (prodcat.Subscri
 }
 
 func (s *Store) ListSubscriptions(ctx context.Context, filter prodcat.SubscriptionFilter) ([]prodcat.Subscription, error) {
-	rows, err := s.queries.ListSubscriptions(ctx, db.ListSubscriptionsParams{
+	rows, err := s.queries.ListSubscriptions(ctx, gen.ListSubscriptionsParams{
 		EntityID:   nilIfEmpty(filter.EntityID),
 		CustomerID: nilIfEmpty(filter.CustomerID),
 		Status:     nilIfEmpty(string(filter.Status)),
@@ -423,7 +423,7 @@ func (s *Store) Activate(ctx context.Context, id string, externalRef string, cap
 
 	qtx := s.queries.WithTx(tx)
 
-	if err := qtx.ActivateSubscription(ctx, db.ActivateSubscriptionParams{
+	if err := qtx.ActivateSubscription(ctx, gen.ActivateSubscriptionParams{
 		ID:          id,
 		ExternalRef: &externalRef,
 	}); err != nil {
@@ -431,10 +431,10 @@ func (s *Store) Activate(ctx context.Context, id string, externalRef string, cap
 	}
 
 	for _, ct := range capabilities {
-		_, err := qtx.CreateCapability(ctx, db.CreateCapabilityParams{
+		_, err := qtx.CreateCapability(ctx, gen.CreateCapabilityParams{
 			SubscriptionID: id,
-			CapabilityType: db.CapabilityType(ct),
-			Status:         db.CapabilityStatusActive,
+			CapabilityType: gen.CapabilityType(ct),
+			Status:         gen.CapabilityStatusActive,
 		})
 		if err != nil {
 			return prodcat.Subscription{}, fmt.Errorf("create capability: %w", err)
@@ -456,9 +456,9 @@ func (s *Store) Cancel(ctx context.Context, id string, reason string) (prodcat.S
 }
 
 func (s *Store) Disable(ctx context.Context, id string, reason prodcat.DisabledReason, message string) (prodcat.Subscription, error) {
-	if err := s.queries.DisableSubscription(ctx, db.DisableSubscriptionParams{
+	if err := s.queries.DisableSubscription(ctx, gen.DisableSubscriptionParams{
 		ID:             id,
-		DisabledReason: db.DisabledReason(reason),
+		DisabledReason: gen.DisabledReason(reason),
 		DisabledMessage: message,
 	}); err != nil {
 		return prodcat.Subscription{}, fmt.Errorf("disable subscription: %w", err)
@@ -474,9 +474,9 @@ func (s *Store) Enable(ctx context.Context, id string) (prodcat.Subscription, er
 }
 
 func (s *Store) DisableCapability(ctx context.Context, subscriptionID string, capabilityID string, reason prodcat.DisabledReason, message string) (prodcat.Subscription, error) {
-	if err := s.queries.DisableCapability(ctx, db.DisableCapabilityParams{
+	if err := s.queries.DisableCapability(ctx, gen.DisableCapabilityParams{
 		ID:             capabilityID,
-		DisabledReason: db.DisabledReason(reason),
+		DisabledReason: gen.DisabledReason(reason),
 		DisabledMessage: message,
 	}); err != nil {
 		return prodcat.Subscription{}, fmt.Errorf("disable capability: %w", err)
@@ -508,10 +508,10 @@ func (s *Store) CheckAccess(ctx context.Context, entityID string) ([]prodcat.Sub
 }
 
 func (s *Store) AddParty(ctx context.Context, subscriptionID string, customerID string, role prodcat.PartyRole) (prodcat.Subscription, error) {
-	_, err := s.queries.AddParty(ctx, db.AddPartyParams{
+	_, err := s.queries.AddParty(ctx, gen.AddPartyParams{
 		SubscriptionID: subscriptionID,
 		CustomerID:     customerID,
-		Role:           db.PartyRole(role),
+		Role:           gen.PartyRole(role),
 	})
 	if err != nil {
 		return prodcat.Subscription{}, fmt.Errorf("add party: %w", err)
@@ -527,9 +527,9 @@ func (s *Store) RemoveParty(ctx context.Context, subscriptionID string, partyID 
 }
 
 func (s *Store) UpdateSigningAuthority(ctx context.Context, subscriptionID string, authority prodcat.SigningAuthority) (prodcat.Subscription, error) {
-	if err := s.queries.UpdateSigningAuthority(ctx, db.UpdateSigningAuthorityParams{
+	if err := s.queries.UpdateSigningAuthority(ctx, gen.UpdateSigningAuthorityParams{
 		ID:            subscriptionID,
-		SigningRule:    db.SigningRule(authority.Rule),
+		SigningRule:    gen.SigningRule(authority.Rule),
 		RequiredCount: int32(authority.RequiredCount),
 	}); err != nil {
 		return prodcat.Subscription{}, fmt.Errorf("update signing authority: %w", err)
