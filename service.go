@@ -116,9 +116,9 @@ type IDDocumentInput struct {
 // KycChecks captures the state of all KYC verification steps for a party.
 type KycChecks struct {
 	// Identity verification (IDV).
-	LivenessPassed     bool       `json:"liveness_passed"`
-	LivenessPassedOn   *time.Time `json:"liveness_passed_on,omitempty"`
-	FacialMatchPassed  bool       `json:"facial_match_passed"`
+	LivenessPassed      bool       `json:"liveness_passed"`
+	LivenessPassedOn    *time.Time `json:"liveness_passed_on,omitempty"`
+	FacialMatchPassed   bool       `json:"facial_match_passed"`
 	FacialMatchPassedOn *time.Time `json:"facial_match_passed_on,omitempty"`
 
 	// Address verification.
@@ -126,18 +126,18 @@ type KycChecks struct {
 	ResidentialAddressValidatedOn *time.Time `json:"residential_address_validated_on,omitempty"`
 
 	// Screening.
-	PEPScreeningClear       bool       `json:"pep_screening_clear"`
-	PEPScreeningClearOn     *time.Time `json:"pep_screening_clear_on,omitempty"`
-	SanctionsScreeningClear bool       `json:"sanctions_screening_clear"`
+	PEPScreeningClear         bool       `json:"pep_screening_clear"`
+	PEPScreeningClearOn       *time.Time `json:"pep_screening_clear_on,omitempty"`
+	SanctionsScreeningClear   bool       `json:"sanctions_screening_clear"`
 	SanctionsScreeningClearOn *time.Time `json:"sanctions_screening_clear_on,omitempty"`
-	AdverseMediaClear       bool       `json:"adverse_media_clear"`
-	AdverseMediaClearOn     *time.Time `json:"adverse_media_clear_on,omitempty"`
+	AdverseMediaClear         bool       `json:"adverse_media_clear"`
+	AdverseMediaClearOn       *time.Time `json:"adverse_media_clear_on,omitempty"`
 
 	// Source of funds / wealth.
-	SourceOfFundsVerified     bool       `json:"source_of_funds_verified"`
-	SourceOfFundsVerifiedOn   *time.Time `json:"source_of_funds_verified_on,omitempty"`
-	SourceOfWealthVerified    bool       `json:"source_of_wealth_verified"`
-	SourceOfWealthVerifiedOn  *time.Time `json:"source_of_wealth_verified_on,omitempty"`
+	SourceOfFundsVerified    bool       `json:"source_of_funds_verified"`
+	SourceOfFundsVerifiedOn  *time.Time `json:"source_of_funds_verified_on,omitempty"`
+	SourceOfWealthVerified   bool       `json:"source_of_wealth_verified"`
+	SourceOfWealthVerifiedOn *time.Time `json:"source_of_wealth_verified_on,omitempty"`
 
 	// Tax / regulatory.
 	TaxResidencyDeclared   bool       `json:"tax_residency_declared"`
@@ -179,9 +179,9 @@ type BusinessEntityInput struct {
 
 // SubscribeRequest creates a new subscription.
 type SubscribeRequest struct {
-	EntityID   string        `json:"entity_id"`
-	EntityType EntityType    `json:"entity_type"`
-	ProductID  string        `json:"product_id"`
+	EntityID   string                `json:"entity_id"`
+	EntityType EntityType            `json:"entity_type"`
+	ProductID  string                `json:"product_id"`
 	Parties    []SubscribePartyInput `json:"parties"`
 }
 

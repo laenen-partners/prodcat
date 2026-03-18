@@ -181,19 +181,19 @@ const (
 // ProductEligibility is a product's eligibility configuration.
 // The product's operational details (fees, rates, limits) live in core banking.
 type ProductEligibility struct {
-	ProductID       string           `json:"product_id"`
-	Name            string           `json:"name"`
-	Description     string           `json:"description"`
-	Tags            []string         `json:"tags"`
-	Status          ProductStatus    `json:"status"`
-	CurrencyCode    string           `json:"currency_code,omitempty"`
-	ParentProductID string           `json:"parent_product_id,omitempty"`
-	ShariaCompliant bool             `json:"sharia_compliant"`
-	Availability    GeoAvailability  `json:"availability"`
-	BaseRulesetIDs  []string         `json:"base_ruleset_ids,omitempty"`
-	Ruleset         []byte           `json:"ruleset,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	ProductID       string          `json:"product_id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Tags            []string        `json:"tags"`
+	Status          ProductStatus   `json:"status"`
+	CurrencyCode    string          `json:"currency_code,omitempty"`
+	ParentProductID string          `json:"parent_product_id,omitempty"`
+	ShariaCompliant bool            `json:"sharia_compliant"`
+	Availability    GeoAvailability `json:"availability"`
+	BaseRulesetIDs  []string        `json:"base_ruleset_ids,omitempty"`
+	Ruleset         []byte          `json:"ruleset,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 // GeoAvailability defines geographic availability.
@@ -217,20 +217,20 @@ type BaseRuleset struct {
 
 // Subscription is a customer's instance of a product.
 type Subscription struct {
-	ID           string             `json:"id"`
-	ProductID    string             `json:"product_id"`
-	EntityID     string             `json:"entity_id"`
-	EntityType   EntityType         `json:"entity_type"`
-	Status       SubscriptionStatus `json:"status"`
+	ID            string             `json:"id"`
+	ProductID     string             `json:"product_id"`
+	EntityID      string             `json:"entity_id"`
+	EntityType    EntityType         `json:"entity_type"`
+	Status        SubscriptionStatus `json:"status"`
 	SigningRule   SigningRule        `json:"signing_rule"`
-	RequiredCount int               `json:"required_count"`
-	ExternalRef  string             `json:"external_ref,omitempty"`
-	Disabled     *DisabledState     `json:"disabled,omitempty"`
-	Parties      []Party            `json:"parties,omitempty"`
-	Capabilities []Capability       `json:"capabilities,omitempty"`
-	CreatedAt    time.Time          `json:"created_at"`
-	ActivatedAt  *time.Time         `json:"activated_at,omitempty"`
-	CanceledAt   *time.Time         `json:"canceled_at,omitempty"`
+	RequiredCount int                `json:"required_count"`
+	ExternalRef   string             `json:"external_ref,omitempty"`
+	Disabled      *DisabledState     `json:"disabled,omitempty"`
+	Parties       []Party            `json:"parties,omitempty"`
+	Capabilities  []Capability       `json:"capabilities,omitempty"`
+	CreatedAt     time.Time          `json:"created_at"`
+	ActivatedAt   *time.Time         `json:"activated_at,omitempty"`
+	CanceledAt    *time.Time         `json:"canceled_at,omitempty"`
 }
 
 // Party represents a person's role on a subscription.
@@ -263,10 +263,10 @@ type DisabledState struct {
 
 // EvaluationResult is the output of an eligibility evaluation.
 type EvaluationResult struct {
-	ProductID    string             `json:"product_id"`
-	Verdict      EligibilityVerdict `json:"verdict"`
+	ProductID    string              `json:"product_id"`
+	Verdict      EligibilityVerdict  `json:"verdict"`
 	Requirements []RequirementResult `json:"requirements"`
-	ResolvedAt   time.Time          `json:"resolved_at"`
+	ResolvedAt   time.Time           `json:"resolved_at"`
 }
 
 // RequirementResult is the outcome of a single evaluation rule.
@@ -282,14 +282,14 @@ type RequirementResult struct {
 // EligibilityReport is the result of checking eligibility across multiple products.
 type EligibilityReport struct {
 	Results    []EvaluationResult `json:"results"`
-	ResolvedAt time.Time         `json:"resolved_at"`
+	ResolvedAt time.Time          `json:"resolved_at"`
 }
 
 // ResolvedRuleset is the merged ruleset for a product.
 type ResolvedRuleset struct {
-	ProductID  string         `json:"product_id"`
-	Merged     []byte         `json:"merged"`
-	Layers     []RulesetLayer `json:"layers"`
+	ProductID string         `json:"product_id"`
+	Merged    []byte         `json:"merged"`
+	Layers    []RulesetLayer `json:"layers"`
 }
 
 // RulesetLayer identifies one component of a merged ruleset.

@@ -8,6 +8,7 @@ require (
 	github.com/laenen-partners/entitystore v0.7.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.41.0
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
 

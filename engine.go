@@ -126,9 +126,9 @@ func (e *Engine) CheckEligibility(ctx context.Context, productIDs []string, inpu
 		result, err := e.Evaluate(ctx, pid, input)
 		if err != nil {
 			results = append(results, EvaluationResult{
-				ProductID:    pid,
-				Verdict:      EligibilityVerdictNotEligible,
-				ResolvedAt:   time.Now().UTC(),
+				ProductID:  pid,
+				Verdict:    EligibilityVerdictNotEligible,
+				ResolvedAt: time.Now().UTC(),
 			})
 			continue
 		}
@@ -190,14 +190,14 @@ func (e *Engine) ResolveRuleset(ctx context.Context, productID string) (Resolved
 func (e *Engine) Subscribe(ctx context.Context, req SubscribeRequest) (Subscription, error) {
 	now := time.Now().UTC()
 	sub := Subscription{
-		ID:           uuid.NewString(),
-		ProductID:    req.ProductID,
-		EntityID:     req.EntityID,
-		EntityType:   req.EntityType,
-		Status:       SubscriptionStatusIncomplete,
+		ID:            uuid.NewString(),
+		ProductID:     req.ProductID,
+		EntityID:      req.EntityID,
+		EntityType:    req.EntityType,
+		Status:        SubscriptionStatusIncomplete,
 		SigningRule:   SigningRuleAnyOne,
 		RequiredCount: 1,
-		CreatedAt:    now,
+		CreatedAt:     now,
 	}
 
 	for _, p := range req.Parties {
@@ -388,13 +388,13 @@ type rulesetYAML struct {
 }
 
 type evaluationYAML struct {
-	Name        string   `yaml:"name"`
-	Expression  string   `yaml:"expression"`
-	Reads       []string `yaml:"reads,omitempty"`
-	Writes      string   `yaml:"writes"`
-	Severity    string   `yaml:"severity"`
-	Category    string   `yaml:"category"`
-	Resolution  string   `yaml:"resolution,omitempty"`
+	Name       string   `yaml:"name"`
+	Expression string   `yaml:"expression"`
+	Reads      []string `yaml:"reads,omitempty"`
+	Writes     string   `yaml:"writes"`
+	Severity   string   `yaml:"severity"`
+	Category   string   `yaml:"category"`
+	Resolution string   `yaml:"resolution,omitempty"`
 	// FailureMode controls what happens when the rule evaluates to false:
 	//   "actionable"     — customer self-service (verify email, accept T&C)
 	//   "input_required" — customer must provide data (upload ID, enter nationality)

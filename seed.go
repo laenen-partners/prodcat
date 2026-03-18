@@ -24,10 +24,10 @@ type SeedTracker interface {
 
 // SeedFile is the top-level structure of a seed YAML file.
 type SeedFile struct {
-	Kind     string            `yaml:"kind"`
-	Version  string            `yaml:"version"`
-	Rulesets []SeedRuleset     `yaml:"rulesets"`
-	Products []SeedProduct     `yaml:"products"`
+	Kind     string        `yaml:"kind"`
+	Version  string        `yaml:"version"`
+	Rulesets []SeedRuleset `yaml:"rulesets"`
+	Products []SeedProduct `yaml:"products"`
 }
 
 // SeedRuleset is a ruleset definition in a seed file.
@@ -41,15 +41,15 @@ type SeedRuleset struct {
 
 // SeedProduct is a product definition in a seed file.
 type SeedProduct struct {
-	ProductID      string          `yaml:"product_id"`
-	Name           string          `yaml:"name"`
-	Description    string          `yaml:"description"`
-	Tags           []string        `yaml:"tags"`
-	Status         string          `yaml:"status"`
-	CurrencyCode   string          `yaml:"currency_code,omitempty"`
-	ShariaCompliant bool           `yaml:"sharia_compliant"`
-	Availability   SeedGeo         `yaml:"availability"`
-	BaseRulesetIDs []string        `yaml:"base_ruleset_ids"`
+	ProductID       string   `yaml:"product_id"`
+	Name            string   `yaml:"name"`
+	Description     string   `yaml:"description"`
+	Tags            []string `yaml:"tags"`
+	Status          string   `yaml:"status"`
+	CurrencyCode    string   `yaml:"currency_code,omitempty"`
+	ShariaCompliant bool     `yaml:"sharia_compliant"`
+	Availability    SeedGeo  `yaml:"availability"`
+	BaseRulesetIDs  []string `yaml:"base_ruleset_ids"`
 }
 
 // SeedGeo is geographic availability in a seed file.

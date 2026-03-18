@@ -349,7 +349,7 @@ func TestProductRegistrationAndLookup(t *testing.T) {
 
 	err := engine.RegisterProduct(ctx, prodcat.ProductEligibility{
 		ProductID: "savings-aed", Name: "AED Savings Account",
-		Tags: []string{"family:casa", "market:uae", "sharia:true"},
+		Tags:   []string{"family:casa", "market:uae", "sharia:true"},
 		Status: prodcat.ProductStatusActive, ShariaCompliant: true, CurrencyCode: "AED",
 		Availability: prodcat.GeoAvailability{
 			Mode: prodcat.AvailabilityModeSpecificCountries, CountryCodes: []string{"AE"},
