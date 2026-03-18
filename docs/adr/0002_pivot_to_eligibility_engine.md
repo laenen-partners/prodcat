@@ -15,7 +15,7 @@ After building the initial product catalogue (ADR-0001), we stepped back and eva
 
 - **Deterministic eligibility via the eval engine.** Regulators require auditable, reproducible decisions. CEL expressions with dependency graphs and resolution workflows are the correct execution model. This doesn't change.
 - **Stripe-style subscriptions with granular capabilities.** The disabled state model with per-capability control and party-level evaluation is sound.
-- **Separation from core banking.** Product operational details (fees, rates, limits) belong in SaaScada. The eligibility layer should not duplicate them.
+- **Separation from core banking.** Product operational details (fees, rates, limits) belong in Core Banking System. The eligibility layer should not duplicate them.
 
 ### What ADR-0001 Got Wrong
 
