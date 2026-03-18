@@ -22,7 +22,7 @@ const (
 // sharedConnStr caches the connection string so all tests share one container.
 var _sharedConnStr string
 
-func sharedTestEngine(t *testing.T) (*prodcat.Engine, *prodcat.MemTracker) {
+func sharedTestEngine(t *testing.T) (*prodcat.Engine, prodcat.SeedTracker) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -71,12 +71,12 @@ func sharedTestEngine(t *testing.T) (*prodcat.Engine, *prodcat.MemTracker) {
 
 	store := prodcat.NewESStore(es)
 	engine := prodcat.NewEngine(store)
-	tracker := prodcat.NewMemTracker()
+	tracker := prodcat.NewESSeedTracker(es)
 
 	return engine, tracker
 }
 
-func seedMalSubscription(t *testing.T, engine *prodcat.Engine, tracker *prodcat.MemTracker) {
+func seedMalSubscription(t *testing.T, engine *prodcat.Engine, tracker prodcat.SeedTracker) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -87,7 +87,7 @@ func seedMalSubscription(t *testing.T, engine *prodcat.Engine, tracker *prodcat.
 	require.NoError(t, err)
 }
 
-func seedCASA(t *testing.T, engine *prodcat.Engine, tracker *prodcat.MemTracker) {
+func seedCASA(t *testing.T, engine *prodcat.Engine, tracker prodcat.SeedTracker) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -343,6 +343,100 @@ func TestProductRegistrationAndLookup(t *testing.T) {
 	assert.True(t, p.ShariaCompliant)
 }
 
+func TestCheckEligibility(t *testing.T) {
+	engine, tracker := sharedTestEngine(t)
+	seedCASA(t, engine, tracker)
+	ctx := context.Background()
+
+	// Check eligibility across both products with a fully-qualified UAE resident.
+	report, err := engine.CheckEligibility(ctx,
+		[]string{"mal-subscription", "casa-current-account-uae"},
+		prodcat.EvaluationInput{
+			Contacts: []prodcat.ContactInput{
+				{Type: 1, Value: "user@example.com", Primary: true, Verified: true},
+				{Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+			},
+			Agreements: []prodcat.AgreementInput{
+				{Type: "general_terms_and_conditions", Accepted: true},
+				{Type: "casa_terms_and_conditions", Accepted: true},
+			},
+			Age: 25, CountryOfResidence: "AE",
+			IDDocuments: []prodcat.IDDocumentInput{
+				{DocumentType: "passport", IssuingCountry: "AE", Verified: true},
+				{DocumentType: "uae_pass", IssuingCountry: "AE", Verified: true},
+			},
+		},
+	)
+	require.NoError(t, err)
+	assert.Len(t, report.Results, 2)
+
+	byProduct := make(map[string]prodcat.EvaluationResult)
+	for _, r := range report.Results {
+		byProduct[r.ProductID] = r
+	}
+	assert.Equal(t, prodcat.EligibilityVerdictEligible, byProduct["mal-subscription"].Verdict)
+	assert.Equal(t, prodcat.EligibilityVerdictEligible, byProduct["casa-current-account-uae"].Verdict)
+}
+
+func TestCheckEligibility_MixedVerdicts(t *testing.T) {
+	engine, tracker := sharedTestEngine(t)
+	seedCASA(t, engine, tracker)
+	ctx := context.Background()
+
+	// 16-year-old — eligible for Mal (no age gate), not eligible for CASA.
+	report, err := engine.CheckEligibility(ctx,
+		[]string{"mal-subscription", "casa-current-account-uae"},
+		prodcat.EvaluationInput{
+			Contacts: []prodcat.ContactInput{
+				{Type: 1, Value: "user@example.com", Primary: true, Verified: true},
+				{Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+			},
+			Agreements: []prodcat.AgreementInput{
+				{Type: "general_terms_and_conditions", Accepted: true},
+			},
+			Age: 16, CountryOfResidence: "AE",
+		},
+	)
+	require.NoError(t, err)
+	assert.Len(t, report.Results, 2)
+
+	byProduct := make(map[string]prodcat.EvaluationResult)
+	for _, r := range report.Results {
+		byProduct[r.ProductID] = r
+	}
+	assert.Equal(t, prodcat.EligibilityVerdictEligible, byProduct["mal-subscription"].Verdict)
+	assert.Equal(t, prodcat.EligibilityVerdictNotEligible, byProduct["casa-current-account-uae"].Verdict)
+}
+
+func TestCheckEligibility_UnknownProduct(t *testing.T) {
+	engine, tracker := sharedTestEngine(t)
+	seedMalSubscription(t, engine, tracker)
+	ctx := context.Background()
+
+	// Unknown product gets a not_eligible result instead of an error.
+	report, err := engine.CheckEligibility(ctx,
+		[]string{"mal-subscription", "nonexistent-product"},
+		prodcat.EvaluationInput{
+			Contacts: []prodcat.ContactInput{
+				{Type: 1, Value: "user@example.com", Primary: true, Verified: true},
+				{Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+			},
+			Agreements: []prodcat.AgreementInput{
+				{Type: "general_terms_and_conditions", Accepted: true},
+			},
+		},
+	)
+	require.NoError(t, err)
+	assert.Len(t, report.Results, 2)
+
+	byProduct := make(map[string]prodcat.EvaluationResult)
+	for _, r := range report.Results {
+		byProduct[r.ProductID] = r
+	}
+	assert.Equal(t, prodcat.EligibilityVerdictEligible, byProduct["mal-subscription"].Verdict)
+	assert.Equal(t, prodcat.EligibilityVerdictNotEligible, byProduct["nonexistent-product"].Verdict)
+}
+
 func TestResolveRuleset(t *testing.T) {
 	engine, tracker := sharedTestEngine(t)
 	seedMalSubscription(t, engine, tracker)
@@ -522,7 +616,8 @@ func TestSeedTracker_Idempotent(t *testing.T) {
 	err = engine.ApplySeed(ctx, malSeedFile, data, tracker)
 	require.NoError(t, err)
 
-	applied, err := tracker.ListApplied(ctx)
+	// Verify the seed was recorded exactly once.
+	applied, err := tracker.HasApplied(ctx, malSeedFile)
 	require.NoError(t, err)
-	assert.Len(t, applied, 1)
+	assert.True(t, applied)
 }

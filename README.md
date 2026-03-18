@@ -4,6 +4,76 @@ An eligibility engine for digital banking. Prodcat determines **who can have whi
 
 Built on [entitystore](https://github.com/laenen-partners/entitystore) for persistence and designed for [evalengine](https://github.com/laenen-partners/evalengine) (CEL-based rules) integration.
 
+## Architecture
+
+```
+                          ┌─────────────────────────────────────────────┐
+                          │            Consumers                        │
+                          │                                             │
+                          │  Onboarding Agent    Product Recommender    │
+                          │  (genkit)            (genkit)               │
+                          └──────────┬──────────────────┬───────────────┘
+                                     │                  │
+                          ┌──────────▼──────────────────▼───────────────┐
+                          │         Eligibility Engine (prodcat)        │
+                          │                                             │
+                          │  ┌─────────────────────────────────────┐    │
+                          │  │         CheckEligibility            │    │
+                          │  │  []productID + EvaluationInput      │    │
+                          │  │  → EligibilityReport (per-product)  │    │
+                          │  └────────────────┬────────────────────┘    │
+                          │                   │                         │
+                          │  ┌────────────────▼────────────────────┐    │
+                          │  │           Evaluate (per product)    │    │
+                          │  │                                     │    │
+                          │  │  1. ResolveRuleset                  │    │
+                          │  │     base rulesets + product ruleset  │    │
+                          │  │     → merged YAML                   │    │
+                          │  │                                     │    │
+                          │  │  2. Evaluate each rule              │    │
+                          │  │     input data → passed/pending/    │    │
+                          │  │                  failed per rule    │    │
+                          │  │                                     │    │
+                          │  │  3. Derive verdict                  │    │
+                          │  │     eligible / incomplete /         │    │
+                          │  │     not_eligible                    │    │
+                          │  └─────────────────────────────────────┘    │
+                          │                                             │
+                          │  ┌──────────────┐  ┌────────────────────┐   │
+                          │  │ Subscribe    │  │ Activate / Disable │   │
+                          │  │ AddParty     │  │ Capabilities       │   │
+                          │  │ Cancel       │  │ Enable / Disable   │   │
+                          │  └──────────────┘  └────────────────────┘   │
+                          └──────────────────────┬──────────────────────┘
+                                                 │
+                          ┌──────────────────────▼──────────────────────┐
+                          │              Store (interface)              │
+                          │                                             │
+                          │  PutProduct / GetProduct / ListProducts     │
+                          │  PutRuleset / GetRuleset / ListRulesets     │
+                          │  PutSubscription / GetSubscription          │
+                          └──────────────────────┬──────────────────────┘
+                                                 │
+                          ┌──────────────────────▼──────────────────────┐
+                          │         entitystore (PostgreSQL)            │
+                          │                                             │
+                          │  entities table   (JSON data + tags)        │
+                          │  entity_anchors   (dedup by product_id,     │
+                          │                    ruleset_id, etc.)        │
+                          │  entity_relations (product → ruleset)       │
+                          └──────────────────────┬──────────────────────┘
+                                                 │
+                          ┌──────────────────────▼──────────────────────┐
+                          │         Seed System                         │
+                          │                                             │
+                          │  YAML files → ApplySeed → products +        │
+                          │  rulesets + SeedTracker (idempotent)        │
+                          │                                             │
+                          │  seed/2026031801_mal_subscription.yaml      │
+                          │  seed/2026031802_casa_current_account.yaml  │
+                          └─────────────────────────────────────────────┘
+```
+
 ## Concepts
 
 ### Products: Flat with Tags
@@ -100,7 +170,7 @@ Both subscriptions and capabilities can be disabled with a reason (Stripe-style)
 
 ### Seed System
 
-Product and ruleset definitions are managed as seed files (like database migrations). Each seed has a timestamped filename and is tracked to ensure idempotent application:
+Product and ruleset definitions are managed as seed files (like database migrations). Each seed has a timestamped filename and is tracked via entitystore to ensure idempotent application:
 
 ```
 seed/
@@ -126,28 +196,12 @@ import (
 )
 
 pool, _ := pgxpool.New(ctx, "postgres://localhost:5432/mydb")
-entitystore.Migrate(ctx, pool) // run entitystore migrations
+entitystore.Migrate(ctx, pool)
 
 es, _ := entitystore.New(entitystore.WithPgStore(pool))
 store := prodcat.NewESStore(es)
+tracker := prodcat.NewESSeedTracker(es)
 engine := prodcat.NewEngine(store)
-```
-
-### Register a Product
-
-```go
-engine.RegisterProduct(ctx, prodcat.ProductEligibility{
-    ProductID:       "casa-current-account-uae",
-    Name:            "Current Account (AED)",
-    Tags:            []string{"family:casa", "type:current_account", "market:uae", "sharia:true"},
-    Status:          prodcat.ProductStatusActive,
-    ShariaCompliant: true,
-    CurrencyCode:    "AED",
-    Availability:    prodcat.GeoAvailability{
-        Mode: prodcat.AvailabilityModeSpecificCountries, CountryCodes: []string{"AE"},
-    },
-    BaseRulesetIDs:  []string{"base-platform-access", "base-age-gate-18", "base-uae-residence"},
-})
 ```
 
 ### Apply Seeds
@@ -157,24 +211,38 @@ data, _ := os.ReadFile("seed/2026031801_mal_subscription.yaml")
 engine.ApplySeed(ctx, "2026031801_mal_subscription.yaml", data, tracker)
 ```
 
-### Evaluate Eligibility
+### Check Eligibility (multiple products)
 
 ```go
-result, _ := engine.Evaluate(ctx, "casa-current-account-uae", prodcat.EvaluationInput{
-    Contacts: []prodcat.ContactInput{
-        {Type: 1, Value: "user@example.com", Primary: true, Verified: true},
-        {Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+report, _ := engine.CheckEligibility(ctx,
+    []string{"mal-subscription", "casa-current-account-uae"},
+    prodcat.EvaluationInput{
+        Contacts: []prodcat.ContactInput{
+            {Type: 1, Value: "user@example.com", Primary: true, Verified: true},
+            {Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+        },
+        Agreements: []prodcat.AgreementInput{
+            {Type: "general_terms_and_conditions", Accepted: true},
+        },
+        Age: 25, CountryOfResidence: "AE",
+        IDDocuments: []prodcat.IDDocumentInput{
+            {DocumentType: "passport", IssuingCountry: "AE", Verified: true},
+            {DocumentType: "uae_pass", IssuingCountry: "AE", Verified: true},
+        },
     },
-    Agreements: []prodcat.AgreementInput{
-        {Type: "general_terms_and_conditions", Accepted: true},
-    },
-    Age: 25, CountryOfResidence: "AE",
-    IDDocuments: []prodcat.IDDocumentInput{
-        {DocumentType: "passport", IssuingCountry: "AE", Verified: true},
-        {DocumentType: "uae_pass", IssuingCountry: "AE", Verified: true},
-    },
-})
+)
 
+for _, r := range report.Results {
+    fmt.Printf("%s: %s\n", r.ProductID, r.Verdict)
+    // mal-subscription: eligible
+    // casa-current-account-uae: eligible
+}
+```
+
+### Evaluate Single Product
+
+```go
+result, _ := engine.Evaluate(ctx, "casa-current-account-uae", input)
 // result.Verdict: "eligible", "incomplete", or "not_eligible"
 // result.Requirements: per-rule status + failure_mode
 ```
@@ -206,6 +274,7 @@ type EligibilityService interface {
     ListProducts(ctx, TagFilter) ([]ProductEligibility, error)
     CreateRuleset(ctx, BaseRuleset) (BaseRuleset, error)
     Evaluate(ctx, productID, EvaluationInput) (EvaluationResult, error)
+    CheckEligibility(ctx, []productID, EvaluationInput) (EligibilityReport, error)
     ResolveRuleset(ctx, productID) (ResolvedRuleset, error)
 }
 
@@ -222,7 +291,7 @@ See [`service.go`](service.go) for full definitions.
 
 ## Persistence
 
-Uses [entitystore](https://github.com/laenen-partners/entitystore) with PostgreSQL (pgvector). Products, rulesets, and subscriptions are stored as entities with anchor-based dedup lookups. Proto definitions in [`proto/eligibility/v1/`](proto/eligibility/v1/) carry entitystore annotations for matching configuration.
+Uses [entitystore](https://github.com/laenen-partners/entitystore) with PostgreSQL (pgvector). Products, rulesets, subscriptions, and seed records are stored as entities with anchor-based dedup lookups. Proto definitions in [`proto/eligibility/v1/`](proto/eligibility/v1/) carry entitystore annotations for matching configuration.
 
 ## Testing
 
@@ -234,7 +303,7 @@ go test ./... -timeout 300s
 
 Requires Docker running locally.
 
-## Architecture
+## ADRs
 
 - [ADR-0001](docs/adr/0001_product_catalogue_architecture.md) — Original product catalogue (superseded)
 - [ADR-0002](docs/adr/0002_pivot_to_eligibility_engine.md) — Pivot to eligibility engine

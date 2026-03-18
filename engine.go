@@ -117,6 +117,30 @@ func (e *Engine) Evaluate(ctx context.Context, productID string, input Evaluatio
 	}, nil
 }
 
+// CheckEligibility evaluates eligibility across multiple products for the same input.
+// Products that fail to resolve (e.g. not found) are skipped with a not_eligible verdict.
+func (e *Engine) CheckEligibility(ctx context.Context, productIDs []string, input EvaluationInput) (EligibilityReport, error) {
+	results := make([]EvaluationResult, 0, len(productIDs))
+
+	for _, pid := range productIDs {
+		result, err := e.Evaluate(ctx, pid, input)
+		if err != nil {
+			results = append(results, EvaluationResult{
+				ProductID:    pid,
+				Verdict:      EligibilityVerdictNotEligible,
+				ResolvedAt:   time.Now().UTC(),
+			})
+			continue
+		}
+		results = append(results, result)
+	}
+
+	return EligibilityReport{
+		Results:    results,
+		ResolvedAt: time.Now().UTC(),
+	}, nil
+}
+
 // ResolveRuleset merges base rulesets + product-specific ruleset.
 func (e *Engine) ResolveRuleset(ctx context.Context, productID string) (ResolvedRuleset, error) {
 	product, err := e.store.GetProduct(ctx, productID)

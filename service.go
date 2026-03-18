@@ -17,6 +17,7 @@ type EligibilityService interface {
 
 	// Evaluation
 	Evaluate(ctx context.Context, productID string, input EvaluationInput) (EvaluationResult, error)
+	CheckEligibility(ctx context.Context, productIDs []string, input EvaluationInput) (EligibilityReport, error)
 	ResolveRuleset(ctx context.Context, productID string) (ResolvedRuleset, error)
 }
 

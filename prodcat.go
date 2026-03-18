@@ -279,6 +279,12 @@ type RequirementResult struct {
 	Resolution  string            `json:"resolution,omitempty"`
 }
 
+// EligibilityReport is the result of checking eligibility across multiple products.
+type EligibilityReport struct {
+	Results    []EvaluationResult `json:"results"`
+	ResolvedAt time.Time         `json:"resolved_at"`
+}
+
 // ResolvedRuleset is the merged ruleset for a product.
 type ResolvedRuleset struct {
 	ProductID  string         `json:"product_id"`
