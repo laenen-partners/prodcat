@@ -1,106 +1,91 @@
 # prodcat
 
-A lightweight product catalogue library for digital banking. Prodcat manages **what products exist**, **who is eligible**, and **what customers need to complete to subscribe**. Product operational details (fees, rates, limits) live in your core banking system — prodcat owns identity, eligibility, and onboarding requirements.
+An eligibility engine for digital banking. Prodcat determines **who can have which products**, **what they still need to do**, and **whether anything has changed that affects their access**. Product operational details (fees, rates, limits) live in your core banking system — prodcat owns eligibility, subscriptions, and onboarding requirements.
+
+Built on [entitystore](https://github.com/laenen-partners/entitystore) for persistence and designed for [evalengine](https://github.com/laenen-partners/evalengine) (CEL-based rules) integration.
 
 ## Concepts
 
-### Product Hierarchy
+### Products: Flat with Tags
 
-Products are organized in a three-tier hierarchy, where each level can define eligibility rules that gate everything below it:
+Products are flat records with tags for filtering — no rigid hierarchy. Tags replace taxonomy:
 
-```
-Family                    e.g., "CASA", "Cards", "Investments"
-  └── Archetype           e.g., "Current Account", "Savings Account"
-        └── Product       e.g., "AED Current Account", "USD Current Account"
-```
+| Tag | Purpose |
+|---|---|
+| `family:casa` | Product family |
+| `type:current_account` | Product type |
+| `market:uae` | Target market |
+| `sharia:true` | Sharia compliance |
+| `segment:retail` | Customer segment |
 
-**Families** define broad eligibility gates. For example, the Investments family might require `age >= 18`, blocking all investment products for minors.
-
-**Archetypes** group related products and add archetype-level rules. For example, all Current Account products might require UAE residency.
-
-**Products** are the subscribable units. Each product has its own eligibility ruleset, geographic availability, compliance metadata, and legal agreements.
+Querying is flexible: "all sharia-compliant CASA products available in UAE for retail customers" is a tag filter.
 
 ### Eligibility & the Eval Engine
 
-Eligibility is defined using [evalengine](https://github.com/laenen-partners/evalengine) — a CEL-based rules engine. Rules are written in YAML and stored as data on each level of the hierarchy:
+Eligibility is defined using YAML rulesets with CEL expressions. Rules are stored as data on products and reusable base rulesets:
 
 ```yaml
 evaluations:
   - name: email_verified
-    expression: >
-      input.contacts.exists(c, c.type == 2 && c.primary == true && c.verified == true)
-    reads: [input.contacts]
+    expression: "input.contacts.exists(c, c.type == 1 && c.primary && c.verified)"
     writes: email_verified
-    resolution_workflow: EmailVerificationWorkflow
-    resolution: "Verify your email address"
     severity: blocking
     category: contact
+    failure_mode: actionable
+    resolution: "Please verify your email address"
 
-  - name: mpin_created
-    expression: >
-      phone_verified && input.mpin_created == true
-    reads: [phone_verified, input.mpin_created]
-    writes: mpin_created
-    resolution_workflow: MpinCreationWorkflow
-    resolution: "Create your mobile PIN"
+  - name: age_gate
+    expression: "input.age >= 18"
+    writes: age_eligible
     severity: blocking
-    category: security
+    category: eligibility
+    failure_mode: definitive
+    resolution: "You must be at least 18 years old"
 ```
 
-The engine automatically resolves dependencies between evaluations and executes them in topological order. Each evaluation writes a boolean that downstream evaluations can read.
+#### Three-State Verdict
 
-#### Base Rulesets
+Evaluation returns one of three verdicts:
 
-Common requirements can be extracted into **base rulesets** — reusable rule sets referenced from any level of the hierarchy. This prevents duplication:
-
-| Base Ruleset | Contains |
+| Verdict | Meaning |
 |---|---|
-| `base-contact-verification` | email_verified, phone_verified |
-| `base-security` | mpin_created |
-| `base-idv` | id_document_scanned, liveness_check_passed, age_eligible |
-| `base-kyc` | residential_address, employment, tax_residency, pep_declaration |
+| `eligible` | All blocking requirements pass |
+| `incomplete` | No definitive failures, but some requirements need action |
+| `not_eligible` | At least one requirement definitively fails — hard reject |
+
+#### Four Failure Modes
+
+Each rule declares what happens when it fails:
+
+| `failure_mode` | Who acts | Example |
+|---|---|---|
+| `actionable` (default) | Customer self-service | Verify email, accept T&C |
+| `input_required` | Customer provides data | Upload passport, provide nationality |
+| `manual_review` | Internal human decision | PEPs screening, compliance review |
+| `definitive` | Nobody — hard reject | Age < 18, blocked jurisdiction |
 
 #### Ruleset Resolution
 
-At evaluation time, rulesets are merged across the full hierarchy:
+At evaluation time, base rulesets + product-specific rulesets are merged:
 
 ```
-base rulesets (family) + family ruleset
-  → base rulesets (archetype) + archetype ruleset
-    → base rulesets (product) + product ruleset
-      → single merged YAML → eval engine
+base rulesets (by ID) + product ruleset → merged YAML → eval engine
 ```
 
 ### Subscriptions
 
-A subscription is created when a customer (or business) begins onboarding for a product. Subscriptions track eligibility state and provide granular control over capabilities.
-
-#### Status
+A subscription is created when a customer begins onboarding for a product.
 
 | Status | Meaning |
 |---|---|
-| `incomplete` | Onboarding in progress, not all requirements met |
+| `incomplete` | Onboarding in progress |
 | `active` | All requirements met, product is live |
-| `past_due` | One or more data elements have expired |
+| `past_due` | Data elements have expired |
 | `canceled` | Canceled by customer or operations |
-
-#### Disabled State (Stripe-style)
-
-Both subscriptions and individual capabilities can be independently disabled with a reason:
-
-```go
-// Disable the whole subscription
-store.Disable(ctx, subID, prodcat.DisabledReasonRegulatoryHold, "AML review pending")
-
-// Disable a specific capability
-store.DisableCapability(ctx, subID, capID, prodcat.DisabledReasonExpiredData, "Emirates ID expired")
-```
-
-Disabled reasons: `requirements_not_met`, `expired_data`, `failed_evaluation`, `regulatory_hold`, `fraud_suspicion`, `customer_requested`, `operations`, `parent_disabled`, `party_incomplete`, `party_removed`.
 
 #### Capabilities
 
-Each subscription has capabilities that can be independently toggled:
+Each subscription has independently controllable capabilities:
 
 | Capability | Description |
 |---|---|
@@ -110,35 +95,18 @@ Each subscription has capabilities that can be independently toggled:
 | `card_payments` | Card payments (POS/online) |
 | `atm` | ATM withdrawals |
 | `receive` | Receive incoming payments |
-| `bill_payments` | Bill payments |
-| `fx` | Currency conversion |
-| `standing_orders` | Recurring transfers |
 
-This enables graceful degradation — an expired ID disables transfers but keeps balance viewing active.
+Both subscriptions and capabilities can be disabled with a reason (Stripe-style).
 
-### Entities and Parties
+### Seed System
 
-Subscriptions support three account structures:
+Product and ruleset definitions are managed as seed files (like database migrations). Each seed has a timestamped filename and is tracked to ensure idempotent application:
 
-| Structure | Entity Type | Parties |
-|---|---|---|
-| Retail (single) | `individual` | 1 primary holder |
-| Joint account | `individual` | 1 primary + N joint holders |
-| SME / Corporate | `business` | Authorized signatories, directors, UBOs |
-
-Each party has their own eval engine state — one party's expired data doesn't automatically block another party.
-
-#### Signing Authority
-
-Defines how many parties must authorize an action:
-
-| Rule | Description |
-|---|---|
-| `any_one` | Any single party (default for retail) |
-| `any_n` | Any N parties (e.g., "any two" for joint accounts) |
-| `all` | All parties must authorize |
-
-Signing authority can be overridden per capability type.
+```
+seed/
+  2026031801_mal_subscription.yaml
+  2026031802_casa_current_account_uae.yaml
+```
 
 ## Installation
 
@@ -153,205 +121,123 @@ go get github.com/laenen-partners/prodcat
 ```go
 import (
     "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/laenen-partners/entitystore"
     "github.com/laenen-partners/prodcat"
-    "github.com/laenen-partners/prodcat/db"
 )
 
-pool, err := pgxpool.New(ctx, "postgres://localhost:5432/mydb")
-if err != nil {
-    log.Fatal(err)
-}
+pool, _ := pgxpool.New(ctx, "postgres://localhost:5432/mydb")
+entitystore.Migrate(ctx, pool) // run entitystore migrations
 
-store, err := db.New(db.WithPool(pool))
-if err != nil {
-    log.Fatal(err)
-}
-
-// Run migrations
-if err := store.Migrate(ctx); err != nil {
-    log.Fatal(err)
-}
+es, _ := entitystore.New(entitystore.WithPgStore(pool))
+store := prodcat.NewESStore(es)
+engine := prodcat.NewEngine(store)
 ```
 
-### Define the Product Hierarchy
+### Register a Product
 
 ```go
-// Create a product family
-_, err := store.CreateFamily(ctx, prodcat.FamilyDefinition{
-    ID:     "casa",
-    Family: prodcat.ProductFamilyCASA,
-    Name:   map[string]string{"en": "CASA", "ar": "حسابات جارية"},
-    Description: map[string]string{"en": "Current and Savings Accounts"},
-    BaseRulesetIDs: []string{"base-contact-verification", "base-security"},
-})
-
-// Create an archetype
-_, err := store.CreateArchetype(ctx, prodcat.Archetype{
-    ID:       "current-account",
-    FamilyID: "casa",
-    Name:     map[string]string{"en": "Current Account"},
-    BaseRulesetIDs: []string{"base-idv", "base-kyc"},
-    Ruleset: []byte(`evaluations:
-  - name: uae_residency
-    expression: "input.id_documents.exists(d, d.type == 'emirates_id')"
-    severity: blocking
-    category: eligibility`),
-})
-
-// Create a product
-_, err := store.CreateProduct(ctx, prodcat.Product{
-    ID:          "aed-ca",
-    ArchetypeID: "current-account",
-    Name:        map[string]string{"en": "AED Current Account"},
-    Status:      prodcat.ProductStatusActive,
-    ProductType: prodcat.ProductTypePrimary,
-    CurrencyCode: "AED",
-    Provider: prodcat.RegulatoryProvider{
-        ProviderID: "mal", Name: "Mal", Regulator: "CBUAE", RegulatoryCountry: "AE",
+engine.RegisterProduct(ctx, prodcat.ProductEligibility{
+    ProductID:       "casa-current-account-uae",
+    Name:            "Current Account (AED)",
+    Tags:            []string{"family:casa", "type:current_account", "market:uae", "sharia:true"},
+    Status:          prodcat.ProductStatusActive,
+    ShariaCompliant: true,
+    CurrencyCode:    "AED",
+    Availability:    prodcat.GeoAvailability{
+        Mode: prodcat.AvailabilityModeSpecificCountries, CountryCodes: []string{"AE"},
     },
-    Compliance: prodcat.ComplianceConfig{ShariaCompliant: true},
-    Eligibility: prodcat.EligibilityConfig{
-        Geographic: prodcat.GeographicAvailability{
-            Mode: prodcat.AvailabilityModeSpecificCountries,
-            CountryCodes: []string{"AE"},
-        },
-        Ruleset: []byte(`evaluations:
-  - name: aed_ca_tc_accepted
-    expression: "input.agreements.exists(a, a.type == 'aed_ca_tc' && a.accepted)"
-    severity: blocking
-    category: legal`),
-    },
-    CreatedBy: "operations",
+    BaseRulesetIDs:  []string{"base-platform-access", "base-age-gate-18", "base-uae-residence"},
 })
 ```
 
-### Subscribe a Customer
+### Apply Seeds
 
 ```go
-// Retail (single holder)
-sub, err := store.Subscribe(ctx, prodcat.SubscribeRequest{
+data, _ := os.ReadFile("seed/2026031801_mal_subscription.yaml")
+engine.ApplySeed(ctx, "2026031801_mal_subscription.yaml", data, tracker)
+```
+
+### Evaluate Eligibility
+
+```go
+result, _ := engine.Evaluate(ctx, "casa-current-account-uae", prodcat.EvaluationInput{
+    Contacts: []prodcat.ContactInput{
+        {Type: 1, Value: "user@example.com", Primary: true, Verified: true},
+        {Type: 2, Value: "+971501234567", Primary: true, Verified: true},
+    },
+    Agreements: []prodcat.AgreementInput{
+        {Type: "general_terms_and_conditions", Accepted: true},
+    },
+    Age: 25, CountryOfResidence: "AE",
+    IDDocuments: []prodcat.IDDocumentInput{
+        {DocumentType: "passport", IssuingCountry: "AE", Verified: true},
+        {DocumentType: "uae_pass", IssuingCountry: "AE", Verified: true},
+    },
+})
+
+// result.Verdict: "eligible", "incomplete", or "not_eligible"
+// result.Requirements: per-rule status + failure_mode
+```
+
+### Subscribe and Activate
+
+```go
+sub, _ := engine.Subscribe(ctx, prodcat.SubscribeRequest{
     EntityID:   "customer-123",
     EntityType: prodcat.EntityTypeIndividual,
-    ProductID:  "aed-ca",
-    InitialParties: []prodcat.PartyInput{
+    ProductID:  "casa-current-account-uae",
+    Parties:    []prodcat.PartyInput{
         {CustomerID: "customer-123", Role: prodcat.PartyRolePrimaryHolder},
     },
-    SigningAuthority: prodcat.SigningAuthority{
-        Rule: prodcat.SigningRuleAnyOne, RequiredCount: 1,
-    },
-})
-// sub.Status == prodcat.SubscriptionStatusIncomplete
-
-// Joint account
-sub, err := store.Subscribe(ctx, prodcat.SubscribeRequest{
-    EntityID:   "customer-123",
-    EntityType: prodcat.EntityTypeIndividual,
-    ProductID:  "aed-ca",
-    InitialParties: []prodcat.PartyInput{
-        {CustomerID: "customer-123", Role: prodcat.PartyRolePrimaryHolder},
-        {CustomerID: "customer-456", Role: prodcat.PartyRoleJointHolder},
-    },
-    SigningAuthority: prodcat.SigningAuthority{
-        Rule: prodcat.SigningRuleAnyN, RequiredCount: 2,
-    },
 })
 
-// SME
-sub, err := store.Subscribe(ctx, prodcat.SubscribeRequest{
-    EntityID:   "business-xyz-llc",
-    EntityType: prodcat.EntityTypeBusiness,
-    ProductID:  "sme-aed-ca",
-    InitialParties: []prodcat.PartyInput{
-        {CustomerID: "director-1", Role: prodcat.PartyRoleAuthorizedSignatory},
-        {CustomerID: "ubo-1", Role: prodcat.PartyRoleUBO},
-    },
-    SigningAuthority: prodcat.SigningAuthority{
-        Rule: prodcat.SigningRuleAnyN, RequiredCount: 2,
-    },
-})
-```
-
-### Activate and Manage
-
-```go
-// Activate after all requirements are met
-sub, err := store.Activate(ctx, sub.ID, "core-banking-ref-123", []prodcat.CapabilityType{
+sub, _ = engine.Activate(ctx, sub.ID, "core-banking-ref", []prodcat.CapabilityType{
     prodcat.CapabilityTypeView,
     prodcat.CapabilityTypeDomesticTransfers,
-    prodcat.CapabilityTypeInternationalTransfers,
-    prodcat.CapabilityTypeReceive,
-})
-
-// Disable a capability (e.g., ID expired)
-sub, err := store.DisableCapability(ctx, sub.ID, capID,
-    prodcat.DisabledReasonExpiredData, "Emirates ID expired")
-
-// Re-enable after refresh
-sub, err := store.EnableCapability(ctx, sub.ID, capID)
-
-// Add a party to an existing subscription
-sub, err := store.AddParty(ctx, sub.ID, "customer-789", prodcat.PartyRoleJointHolder)
-
-// Update signing authority
-sub, err := store.UpdateSigningAuthority(ctx, sub.ID, prodcat.SigningAuthority{
-    Rule: prodcat.SigningRuleAll, RequiredCount: 2,
 })
 ```
 
 ## Service Interfaces
 
-The library exposes two interfaces that the PostgreSQL store implements:
-
 ```go
-type CatalogService interface {
-    // Families, Archetypes, Products — full CRUD
-    // Base rulesets — create, read, update
-    // Product discovery — geographic + segment filtering
-    // Ruleset resolution — merge all layers
+type EligibilityService interface {
+    RegisterProduct(ctx, ProductEligibility) error
+    GetProduct(ctx, productID) (ProductEligibility, error)
+    ListProducts(ctx, TagFilter) ([]ProductEligibility, error)
+    CreateRuleset(ctx, BaseRuleset) (BaseRuleset, error)
+    Evaluate(ctx, productID, EvaluationInput) (EvaluationResult, error)
+    ResolveRuleset(ctx, productID) (ResolvedRuleset, error)
 }
 
 type SubscriptionService interface {
-    // Subscribe, Activate, Cancel
-    // Disable / Enable (subscription + capability level)
-    // Evaluate / EvaluateParty / CheckAccess
-    // AddParty / RemoveParty
-    // UpdateSigningAuthority
+    Subscribe(ctx, SubscribeRequest) (Subscription, error)
+    Activate(ctx, id, externalRef, capabilities) (Subscription, error)
+    Cancel(ctx, id, reason) (Subscription, error)
+    Disable / Enable (subscription + capability level)
+    AddParty / RemoveParty
 }
 ```
 
-See [`service.go`](service.go) for the full interface definitions.
+See [`service.go`](service.go) for full definitions.
 
-## Database
+## Persistence
 
-The PostgreSQL schema uses native enums for type safety:
-
-```sql
-CREATE TYPE product_family AS ENUM ('casa', 'lending', 'cards', ...);
-CREATE TYPE subscription_status AS ENUM ('incomplete', 'active', 'past_due', 'canceled');
-CREATE TYPE party_role AS ENUM ('primary_holder', 'joint_holder', 'authorized_signatory', ...);
-CREATE TYPE capability_type AS ENUM ('view', 'domestic_transfers', ...);
-CREATE TYPE disabled_reason AS ENUM ('expired_data', 'regulatory_hold', ...);
-```
-
-Migrations are embedded in the binary and run via [laenen-partners/migrate](https://github.com/laenen-partners/migrate):
-
-```go
-store.Migrate(ctx) // applies all pending migrations
-```
+Uses [entitystore](https://github.com/laenen-partners/entitystore) with PostgreSQL (pgvector). Products, rulesets, and subscriptions are stored as entities with anchor-based dedup lookups. Proto definitions in [`proto/eligibility/v1/`](proto/eligibility/v1/) carry entitystore annotations for matching configuration.
 
 ## Testing
 
-Tests use [testcontainers-go](https://github.com/testcontainers/testcontainers-go) with PostgreSQL 16:
+Tests use [testcontainers-go](https://github.com/testcontainers/testcontainers-go) with `pgvector/pgvector:pg17`:
 
 ```bash
-go test ./db/ -v -timeout 300s
+go test ./... -timeout 300s
 ```
 
 Requires Docker running locally.
 
 ## Architecture
 
-For the full architecture specification, see [ADR-0001](docs/adr/0001_product_catalogue_architecture.md).
+- [ADR-0001](docs/adr/0001_product_catalogue_architecture.md) — Original product catalogue (superseded)
+- [ADR-0002](docs/adr/0002_pivot_to_eligibility_engine.md) — Pivot to eligibility engine
 
 ## License
 
