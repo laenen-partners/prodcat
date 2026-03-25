@@ -1,0 +1,265 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/laenen-partners/dsx/ds"
+	"github.com/laenen-partners/dsx/ui/badge"
+	"github.com/laenen-partners/dsx/ui/button"
+	"github.com/laenen-partners/dsx/ui/table"
+	"github.com/laenen-partners/dsx/ui/yamltree"
+	"github.com/laenen-partners/prodcat"
+)
+
+// ProductListTable renders the product list with a "show disabled" toggle.
+templ ProductListTable(products []prodcat.Product, canEdit bool, signals ProductListSignals) {
+	<div id="product-list" { ds.RawSignals(productSignalsJSON(signals))... }>
+		<div class="flex flex-wrap items-center gap-2 mb-3">
+			<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+				<input
+					type="checkbox"
+					class="checkbox checkbox-sm"
+					checked?={ signals.ShowDisabled }
+					{ ds.Merge(
+						ds.Bind("catalog", "showDisabled"),
+						ds.On("change", ds.Get("/fragments/products")),
+					)... }
+				/>
+				Show disabled
+			</label>
+		</div>
+		if len(products) == 0 {
+			<div class="text-base-content/60 text-sm p-4">No products found.</div>
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table(table.Props{Size: table.SizeSm}) {
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Status</th>
+							<th>Currency</th>
+							<th>Tags</th>
+							<th>Rulesets</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, p := range products {
+							<tr class="hover cursor-pointer" { ds.OnClick(ds.GetOnce(fmt.Sprintf("/fragments/products/%s", p.ProductID)))... }>
+								<td>
+									<div class="flex flex-col">
+										<span class="font-medium text-sm">{ p.Name }</span>
+										<span class="text-xs text-base-content/40 font-mono">{ p.ProductID }</span>
+									</div>
+								</td>
+								<td>
+									@ProductStatusBadge(&p)
+								</td>
+								<td class="text-xs font-mono">{ p.CurrencyCode }</td>
+								<td>
+									@TagList(p.Tags)
+								</td>
+								<td class="text-xs text-base-content/60">{ fmt.Sprintf("%d", len(p.BaseRulesetIDs)) }</td>
+							</tr>
+						}
+					</tbody>
+				}
+			</div>
+		}
+	</div>
+}
+
+// ProductDetailContent renders the product detail panel.
+templ ProductDetailContent(product *prodcat.Product) {
+	<h3 class="text-lg font-bold">Product Details</h3>
+	<div class="space-y-4 mt-3">
+		<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+			<span class="text-base-content/60">ID</span>
+			<span class="font-mono text-xs">{ product.ProductID }</span>
+			<span class="text-base-content/60">Name</span>
+			<span>{ product.Name }</span>
+			<span class="text-base-content/60">Status</span>
+			<span>
+				@ProductStatusBadge(product)
+			</span>
+			if product.Description != "" {
+				<span class="text-base-content/60">Description</span>
+				<span class="text-xs">{ product.Description }</span>
+			}
+			if product.CurrencyCode != "" {
+				<span class="text-base-content/60">Currency</span>
+				<span class="font-mono text-xs">{ product.CurrencyCode }</span>
+			}
+			if product.Availability.Mode != "" {
+				<span class="text-base-content/60">Availability</span>
+				<span class="text-xs">
+					{ string(product.Availability.Mode) }
+					if len(product.Availability.CountryCodes) > 0 {
+						<span class="font-mono"> ({ strings.Join(product.Availability.CountryCodes, ", ") })</span>
+					}
+				</span>
+			}
+			if product.ParentProductID != "" {
+				<span class="text-base-content/60">Parent Product</span>
+				<span class="font-mono text-xs">{ product.ParentProductID }</span>
+			}
+			<span class="text-base-content/60">Created</span>
+			<span class="text-xs">{ product.CreatedAt.Format("2006-01-02 15:04:05") }</span>
+			<span class="text-base-content/60">Updated</span>
+			<span class="text-xs">{ product.UpdatedAt.Format("2006-01-02 15:04:05") }</span>
+		</div>
+		if len(product.Tags) > 0 {
+			<div class="space-y-1">
+				<h4 class="text-sm font-semibold">Tags</h4>
+				@TagList(product.Tags)
+			</div>
+		}
+		if len(product.BaseRulesetIDs) > 0 {
+			<div class="space-y-1">
+				<h4 class="text-sm font-semibold">Linked Rulesets</h4>
+				<div class="flex flex-wrap gap-1">
+					for _, rsID := range product.BaseRulesetIDs {
+						@badge.Badge(badge.Props{Variant: badge.VariantInfo, Style: badge.StyleOutline, Size: badge.SizeSm}) {
+							{ rsID }
+						}
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// RulesetListTable renders the ruleset list with disabled toggle.
+templ RulesetListTable(rulesets []prodcat.Ruleset, canEdit bool, signals RulesetListSignals) {
+	<div id="ruleset-list" { ds.RawSignals(rulesetSignalsJSON(signals))... }>
+		<div class="flex flex-wrap items-center gap-2 mb-3">
+			<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+				<input
+					type="checkbox"
+					class="checkbox checkbox-sm"
+					checked?={ signals.ShowDisabled }
+					{ ds.Merge(
+						ds.Bind("catalog", "showDisabled"),
+						ds.On("change", ds.Get("/fragments/rulesets")),
+					)... }
+				/>
+				Show disabled
+			</label>
+		</div>
+		if len(rulesets) == 0 {
+			<div class="text-base-content/60 text-sm p-4">No rulesets found.</div>
+		} else {
+			<div class="overflow-x-auto">
+				@table.Table(table.Props{Size: table.SizeSm}) {
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Status</th>
+							<th>Version</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, rs := range rulesets {
+							<tr class="hover cursor-pointer" { ds.OnClick(ds.GetOnce(fmt.Sprintf("/fragments/rulesets/%s", rs.ID)))... }>
+								<td>
+									<div class="flex flex-col">
+										<span class="font-medium text-sm">{ rs.Name }</span>
+										<span class="text-xs text-base-content/40 font-mono">{ rs.ID }</span>
+									</div>
+								</td>
+								<td>
+									@RulesetStatusBadge(rs.Disabled)
+									if rs.Disabled && string(rs.DisabledReason) != "" {
+										@badge.Badge(badge.Props{Style: badge.StyleGhost, Size: badge.SizeSm}) {
+											{ string(rs.DisabledReason) }
+										}
+									}
+								</td>
+								<td class="text-xs font-mono">{ rs.Version }</td>
+							</tr>
+						}
+					</tbody>
+				}
+			</div>
+		}
+	</div>
+}
+
+// RulesetDetailContent renders the ruleset detail panel.
+templ RulesetDetailContent(ruleset *prodcat.Ruleset, canEdit bool) {
+	<h3 class="text-lg font-bold">Ruleset Details</h3>
+	<div class="space-y-4 mt-3">
+		<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+			<span class="text-base-content/60">ID</span>
+			<span class="font-mono text-xs">{ ruleset.ID }</span>
+			<span class="text-base-content/60">Name</span>
+			<span>{ ruleset.Name }</span>
+			<span class="text-base-content/60">Status</span>
+			<span>
+				@RulesetStatusBadge(ruleset.Disabled)
+				if ruleset.Disabled && string(ruleset.DisabledReason) != "" {
+					<span class="text-xs text-base-content/40 ml-1">({ string(ruleset.DisabledReason) })</span>
+				}
+			</span>
+			if ruleset.Description != "" {
+				<span class="text-base-content/60">Description</span>
+				<span class="text-xs">{ ruleset.Description }</span>
+			}
+			<span class="text-base-content/60">Version</span>
+			<span class="font-mono text-xs">{ ruleset.Version }</span>
+			<span class="text-base-content/60">Created</span>
+			<span class="text-xs">{ ruleset.CreatedAt.Format("2006-01-02 15:04:05") }</span>
+			<span class="text-base-content/60">Updated</span>
+			<span class="text-xs">{ ruleset.UpdatedAt.Format("2006-01-02 15:04:05") }</span>
+		</div>
+		if len(ruleset.Content) > 0 {
+			<div class="space-y-1">
+				<h4 class="text-sm font-semibold">Content</h4>
+				@yamltree.YamlTree(yamltree.Props{
+					ID:       fmt.Sprintf("ruleset-%s", ruleset.ID),
+					Data:     parseYAML(ruleset.Content),
+					ReadOnly: true,
+				})
+			</div>
+		}
+		if canEdit {
+			<div class="flex gap-2 pt-2">
+				if ruleset.Disabled {
+					@button.Button(button.Props{
+						Variant: button.VariantSuccess,
+						Size:    button.SizeSm,
+					}) {
+						<span { ds.OnClick(ds.Post(fmt.Sprintf("/fragments/rulesets/%s/enable", ruleset.ID)))... }>
+							Enable Ruleset
+						</span>
+					}
+				} else {
+					@button.Button(button.Props{
+						Variant: button.VariantError,
+						Size:    button.SizeSm,
+					}) {
+						<span { ds.OnClick(ds.Post(fmt.Sprintf("/fragments/rulesets/%s/disable", ruleset.ID)))... }>
+							Disable Ruleset
+						</span>
+					}
+				}
+			</div>
+		}
+	</div>
+}
+
+func productSignalsJSON(s ProductListSignals) string {
+	showDisabled := "false"
+	if s.ShowDisabled {
+		showDisabled = "true"
+	}
+	return fmt.Sprintf(`{"catalog":{"showDisabled":%s}}`, showDisabled)
+}
+
+func rulesetSignalsJSON(s RulesetListSignals) string {
+	showDisabled := "false"
+	if s.ShowDisabled {
+		showDisabled = "true"
+	}
+	return fmt.Sprintf(`{"catalog":{"showDisabled":%s}}`, showDisabled)
+}

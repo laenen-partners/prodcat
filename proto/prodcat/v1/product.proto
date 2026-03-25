@@ -2,112 +2,49 @@ syntax = "proto3";
 
 package prodcat.v1;
 
-option go_package = "github.com/plaenen/prodcat/gen/prodcat/v1;prodcatv1";
+option go_package = "github.com/laenen-partners/prodcat/gen/prodcat/v1;prodcatv1";
 
-import "google/protobuf/timestamp.proto";
-import "prodcat/v1/types.proto";
-import "prodcat/v1/geography.proto";
-import "prodcat/v1/compliance.proto";
-import "prodcat/v1/eligibility.proto";
+import "entitystore/v1/options.proto";
 
-// ProductFamilyDefinition is the top level of the product hierarchy.
-// Rulesets at this level gate entire product families.
-// e.g., "under 18 → no investment products", "non-resident → no lending".
-message ProductFamilyDefinition {
-  string family_id = 1;
-  ProductFamily family = 2;
-  repeated LocalizedText name = 3;
-  repeated LocalizedText description = 4;
-
-  // Family-level eval engine rules + base rulesets.
-  // Evaluated BEFORE archetype or product rulesets.
-  // If any rule fails here, all products in this family are blocked.
-  RulesetConfig rules = 5;
+enum DisabledReason {
+    DISABLED_REASON_UNSPECIFIED = 0;
+    DISABLED_REASON_DRAFT = 1;
 }
 
-// ProductArchetype groups related product instances within a family.
-// e.g., Family=CASA → Archetypes: "Current Account", "Savings Account".
-// Rulesets at this level gate all products of this archetype.
-// e.g., "savings accounts require UAE residency".
-message ProductArchetype {
-  string archetype_id = 1;
-  string family_id = 2;
-  repeated LocalizedText name = 3;
-  repeated LocalizedText description = 4;
-
-  // Archetype-level eval engine rules + base rulesets.
-  // Evaluated after family-level but before product-level.
-  // If any rule fails here, all products under this archetype are blocked.
-  RulesetConfig rules = 5;
-}
-
-enum ProductFamily {
-  PRODUCT_FAMILY_UNSPECIFIED = 0;
-  PRODUCT_FAMILY_CASA = 1;
-  PRODUCT_FAMILY_LENDING = 2;
-  PRODUCT_FAMILY_CARDS = 3;
-  PRODUCT_FAMILY_PAYMENTS = 4;
-  PRODUCT_FAMILY_INVESTMENTS = 5;
-  PRODUCT_FAMILY_INSURANCE = 6;
-  PRODUCT_FAMILY_PFM = 7;
-  PRODUCT_FAMILY_VALUE_ADDED = 8;
-}
-
-// Product is a subscribable offering in the catalogue.
-// Product details (fees, rates, limits) live in the core banking system.
-// Prodcat owns identity, eligibility, compliance, and onboarding requirements.
+// Product defines a product's elegibility configuration.
+// The product's operational details (fees, rates, limits) live in core banking.
+// This only captures what's needed for eligibility decisions.
 message Product {
-  string product_id = 1;
-  string archetype_id = 2;
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    allowed_relations: ["has_ruleset", "parent_of"]
+    extraction_display_name: "Product"
+  };
 
-  repeated LocalizedText name = 3;
-  repeated LocalizedText description = 4;
-  repeated LocalizedText tagline = 5;
+  string product_id = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+    normalizer: NORMALIZER_LOWERCASE_TRIM
+  }];
 
-  ProductStatus status = 6;
-  ProductType product_type = 7;
+  string name = 2 [(entitystore.v1.field) = {
+    embed: true
+    token_field: true
+  }];
 
-  // Primary currency (ISO 4217).
-  string currency_code = 8;
+  string description = 3 [(entitystore.v1.field) = {
+    embed: true
+  }];
 
-  // Reserved: fields removed in lightweight redesign.
-  reserved 9, 12, 16, 17, 100, 101;
+  DisabledReason disabled_reason = 4;
 
-  // The regulated entity offering this product.
-  RegulatoryProvider provider = 10;
+  repeated string tags = 5;
+  string status = 6;
+  string parent_product_id = 7;
+  repeated string ruleset_ids = 8;
 
-  // When this product definition is effective.
-  DateRange effective_period = 11;
-
-  // Regulatory and Sharia compliance metadata.
-  ComplianceConfig compliance = 13;
-
-  // Eligibility and onboarding requirements.
-  EligibilityConfig eligibility = 14;
-
-  // For supplementary products: the parent product that must be active.
-  // e.g., Debit Card → AED Current Account.
-  string parent_product_id = 15;
-
-  // Metadata.
-  google.protobuf.Timestamp created_at = 50;
-  google.protobuf.Timestamp updated_at = 51;
-  string created_by = 52;
-}
-
-enum ProductStatus {
-  PRODUCT_STATUS_UNSPECIFIED = 0;
-  PRODUCT_STATUS_DRAFT = 1;
-  PRODUCT_STATUS_ACTIVE = 2;
-  PRODUCT_STATUS_SUSPENDED = 3;
-  PRODUCT_STATUS_DEPRECATED = 4;
-  PRODUCT_STATUS_RETIRED = 5;
-}
-
-enum ProductType {
-  PRODUCT_TYPE_UNSPECIFIED = 0;
-  // Standalone product with its own KYC requirements.
-  PRODUCT_TYPE_PRIMARY = 1;
-  // Linked to a parent primary product. Inherits parent's KYC.
-  PRODUCT_TYPE_SUPPLEMENTARY = 2;
+  // Used for additional information like
+  // Only-available-contries
+  map<string, string> meta = 9;
 }

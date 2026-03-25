@@ -1,0 +1,72 @@
+# CASA Current Account
+# Standard current account with KYC and identity verification.
+# Requires: platform access, age 18+, valid passport, terms accepted.
+
+kind: catalog
+version: "1.0"
+
+rulesets:
+  - id: base-age-gate-18
+    name: Age Gate 18+
+    description: Requires the primary holder to be at least 18 years old
+    version: "0.0.1"
+    evaluations:
+      - name: age_18_plus
+        expression: "input.parties.exists(p, p.role == 1 && p.age >= 18)"
+        writes: age_eligible
+        severity: blocking
+        category: eligibility
+        failure_mode: definitive
+        resolution: "You must be at least 18 years old"
+
+  - id: casa-current-account
+    name: CASA Current Account Rules
+    description: Product-specific rules for current account
+    version: "0.0.1"
+    evaluations:
+      - name: valid_passport
+        expression: "input.parties.exists(p, p.role == 1 && p.id_documents.exists(d, d.document_type == 'passport' && d.verified && !d.expired))"
+        writes: valid_passport
+        severity: blocking
+        category: identity
+        failure_mode: input_required
+        resolution: "Please upload a valid passport"
+
+      - name: casa_tc_accepted
+        expression: "input.agreements.exists(a, a.type == 'casa_terms_and_conditions' && a.accepted)"
+        writes: casa_tc_accepted
+        severity: blocking
+        category: legal
+        failure_mode: actionable
+        resolution: "Please accept the current account terms and conditions"
+
+      - name: casa_ready
+        expression: "age_eligible && valid_passport && casa_tc_accepted"
+        reads:
+          - age_eligible
+          - valid_passport
+          - casa_tc_accepted
+        writes: casa_ready
+        severity: blocking
+        category: readiness
+
+products:
+  - product_id: casa-current-account
+    name: Current Account
+    description: Standard current account with full KYC
+    tags:
+      - "family:casa"
+      - "type:current_account"
+      - "segment:retail"
+    currency_code: USD
+    availability:
+      mode: global
+    base_ruleset_ids:
+      - base-platform-access
+      - base-age-gate-18
+      - base-retail-idv
+      - base-retail-screening
+      - base-retail-address
+      - base-retail-tax
+      - base-retail-full-kyc
+      - casa-current-account

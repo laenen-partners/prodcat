@@ -1,0 +1,14 @@
+package main
+
+import "github.com/laenen-partners/dsx/showcase"
+
+templ showcasePage() {
+	@showcase.Page("Product Catalogue Showcase") {
+		@showcase.Section("Products", "Product list with status filtering. Click a row to open the detail drawer.") {
+			@showcase.Fragment("product-list", "/fragments/products")
+		}
+		@showcase.Section("Rulesets", "Eligibility rulesets with disable/enable lifecycle. Toggle 'Show disabled' to see soft-deleted rulesets.") {
+			@showcase.Fragment("ruleset-list", "/fragments/rulesets")
+		}
+	}
+}

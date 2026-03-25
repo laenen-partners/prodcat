@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package prodcat.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/prodcat/v1;prodcatv1";
+
+import "entitystore/v1/options.proto";
+
+// ImportRecord tracks which catalogue definitions have been imported.
+message ImportRecord {
+  option (entitystore.v1.message) = {
+    match_thresholds: {auto_match: 0.95, review_zone: 0.80}
+    extraction_display_name: "ImportRecord"
+  };
+
+  // Filename of the catalogue definition (e.g. "2026031801_platform_subscription.yaml").
+  string filename = 1 [(entitystore.v1.field) = {
+    anchor: true
+    similarity: SIMILARITY_FUNCTION_EXACT
+    weight: 1.0
+    normalizer: NORMALIZER_LOWERCASE_TRIM
+  }];
+
+  // SHA-256 checksum of the file content.
+  string checksum = 2;
+
+  // ISO 8601 timestamp of when the import was applied.
+  string applied_at = 3;
+}

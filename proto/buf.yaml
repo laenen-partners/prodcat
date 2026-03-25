@@ -1,7 +1,9 @@
 version: v2
 modules:
   - path: .
-    name: buf.build/plaenen/prodcat
+    name: buf.build/laenen-partners/prodcat
+deps:
+  - buf.build/laenen-partners/entitystore
 lint:
   use:
     - STANDARD

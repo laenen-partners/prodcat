@@ -1,0 +1,50 @@
+package ui
+
+import (
+	"github.com/laenen-partners/dsx/ui/badge"
+	"github.com/laenen-partners/prodcat"
+)
+
+// ProductStatusBadge renders a badge based on the product's disabled state.
+templ ProductStatusBadge(p *prodcat.Product) {
+	if p.Disabled {
+		@badge.Badge(badge.Props{Variant: badge.VariantError, Style: badge.StyleSoft, Size: badge.SizeSm}) {
+			Disabled
+		}
+		if string(p.DisabledReason) != "" {
+			@badge.Badge(badge.Props{Style: badge.StyleGhost, Size: badge.SizeSm}) {
+				{ string(p.DisabledReason) }
+			}
+		}
+	} else {
+		@badge.Badge(badge.Props{Variant: badge.VariantSuccess, Style: badge.StyleSoft, Size: badge.SizeSm}) {
+			Active
+		}
+	}
+}
+
+// RulesetStatusBadge renders a badge for ruleset enabled/disabled state.
+templ RulesetStatusBadge(disabled bool) {
+	if disabled {
+		@badge.Badge(badge.Props{Variant: badge.VariantError, Style: badge.StyleSoft, Size: badge.SizeSm}) {
+			Disabled
+		}
+	} else {
+		@badge.Badge(badge.Props{Variant: badge.VariantSuccess, Style: badge.StyleSoft, Size: badge.SizeSm}) {
+			Active
+		}
+	}
+}
+
+// TagList renders a list of tag badges.
+templ TagList(tags []string) {
+	if len(tags) > 0 {
+		<div class="flex flex-wrap gap-1">
+			for _, tag := range tags {
+				@badge.Badge(badge.Props{Style: badge.StyleOutline, Size: badge.SizeSm}) {
+					{ tag }
+				}
+			}
+		</div>
+	}
+}

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "5488:5432"
+    environment:
+      POSTGRES_DB: prodcat_showcase
+      POSTGRES_USER: showcase
+      POSTGRES_PASSWORD: showcase
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

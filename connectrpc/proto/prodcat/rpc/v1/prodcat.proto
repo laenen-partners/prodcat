@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package prodcat.rpc.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/connectrpc/gen/prodcat/rpc/v1;prodcatrpcv1";
+
+// --- Domain models ---
+
+enum ProductStatus {
+  PRODUCT_STATUS_UNSPECIFIED = 0;
+  PRODUCT_STATUS_ACTIVE = 1;
+  PRODUCT_STATUS_SUSPENDED = 2;
+}
+
+message GeoAvailability {
+  string mode = 1;
+  repeated string country_codes = 2;
+}
+
+message Product {
+  string product_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string tags = 4;
+  ProductStatus status = 5;
+  string currency_code = 6;
+  string parent_product_id = 7;
+  bool sharia_compliant = 8;
+  GeoAvailability availability = 9;
+  repeated string base_ruleset_ids = 10;
+  bytes ruleset = 11;
+  string created_at = 12;
+  string updated_at = 13;
+}
+
+message Ruleset {
+  string ruleset_id = 1;
+  string name = 2;
+  string description = 3;
+  bytes content = 4;
+  string version = 5;
+  bool disabled = 6;
+  string disabled_reason = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}
+
+message RulesetLayer {
+  string source = 1;
+  string source_id = 2;
+}
+
+message ResolvedRuleset {
+  string product_id = 1;
+  bytes merged = 2;
+  repeated RulesetLayer layers = 3;
+}
+
+message Provenance {
+  string source_urn = 1;
+  string reason = 2;
+}
+
+// --- Services ---
+
+service ProductCatalogQueryService {
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc GetRuleset(GetRulesetRequest) returns (GetRulesetResponse);
+  rpc ListRulesets(ListRulesetsRequest) returns (ListRulesetsResponse);
+  rpc ResolveRuleset(ResolveRulesetRequest) returns (ResolveRulesetResponse);
+}
+
+service ProductCatalogCommandService {
+  rpc RegisterProduct(RegisterProductRequest) returns (RegisterProductResponse);
+  rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
+  rpc CreateRuleset(CreateRulesetRequest) returns (CreateRulesetResponse);
+  rpc DisableRuleset(DisableRulesetRequest) returns (DisableRulesetResponse);
+  rpc EnableRuleset(EnableRulesetRequest) returns (EnableRulesetResponse);
+  rpc AddRuleset(AddRulesetRequest) returns (AddRulesetResponse);
+  rpc RemoveRuleset(RemoveRulesetRequest) returns (RemoveRulesetResponse);
+  rpc SetProductRuleset(SetProductRulesetRequest) returns (SetProductRulesetResponse);
+  rpc Import(ImportRequest) returns (ImportResponse);
+}
+
+// --- Query requests/responses ---
+
+message GetProductRequest { string product_id = 1; }
+message GetProductResponse { Product product = 1; }
+
+message ListProductsRequest {
+  repeated string tags = 1;
+  string status = 2;
+  string country_code = 3;
+}
+message ListProductsResponse { repeated Product products = 1; }
+
+message GetRulesetRequest { string ruleset_id = 1; }
+message GetRulesetResponse { Ruleset ruleset = 1; }
+
+message ListRulesetsRequest {}
+message ListRulesetsResponse { repeated Ruleset rulesets = 1; }
+
+message ResolveRulesetRequest { string product_id = 1; }
+message ResolveRulesetResponse { ResolvedRuleset resolved = 1; }
+
+// --- Command requests/responses ---
+
+message RegisterProductRequest { Product product = 1; Provenance provenance = 2; }
+message RegisterProductResponse { Product product = 1; }
+
+message UpdateProductRequest { Product product = 1; Provenance provenance = 2; }
+message UpdateProductResponse { Product product = 1; }
+
+message CreateRulesetRequest { Ruleset ruleset = 1; Provenance provenance = 2; }
+message CreateRulesetResponse { Ruleset ruleset = 1; }
+
+message DisableRulesetRequest { string ruleset_id = 1; string reason = 2; Provenance provenance = 3; }
+message DisableRulesetResponse { Ruleset ruleset = 1; }
+
+message EnableRulesetRequest { string ruleset_id = 1; Provenance provenance = 2; }
+message EnableRulesetResponse { Ruleset ruleset = 1; }
+
+message AddRulesetRequest { string product_id = 1; string ruleset_id = 2; Provenance provenance = 3; }
+message AddRulesetResponse { Product product = 1; }
+
+message RemoveRulesetRequest { string product_id = 1; string ruleset_id = 2; Provenance provenance = 3; }
+message RemoveRulesetResponse { Product product = 1; }
+
+message SetProductRulesetRequest { string product_id = 1; bytes content = 2; Provenance provenance = 3; }
+message SetProductRulesetResponse { Product product = 1; }
+
+message ImportRequest { string filename = 1; bytes data = 2; }
+message ImportResponse {}
