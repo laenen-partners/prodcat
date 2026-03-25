@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package prodcat.v1;
+
+option go_package = "github.com/laenen-partners/prodcat/gen/prodcat/v1;prodcatv1";
+
+// Product lifecycle events — carry full business context.
+
+message ProductCreated {
+  string product_id = 1;
+  string actor = 2;
+  string name = 3;
+  string description = 4;
+  repeated string tags = 5;
+  string currency_code = 6;
+  repeated string base_ruleset_ids = 7;
+}
+
+message ProductUpdated {
+  string product_id = 1;
+  string actor = 2;
+  string name = 3;
+  string description = 4;
+  repeated string tags = 5;
+  string currency_code = 6;
+  repeated string base_ruleset_ids = 7;
+}
+
+message ProductDisabled {
+  string product_id = 1;
+  string actor = 2;
+  string reason = 3;
+  string name = 4;
+}
+
+message ProductEnabled {
+  string product_id = 1;
+  string actor = 2;
+  string name = 3;
+}
+
+message ProductDeleted {
+  string product_id = 1;
+  string actor = 2;
+  string name = 3;
+}
+
+// Ruleset lifecycle events.
+
+message RulesetCreated {
+  string ruleset_id = 1;
+  string actor = 2;
+  string name = 3;
+  string description = 4;
+  string version = 5;
+}
+
+message RulesetDisabled {
+  string ruleset_id = 1;
+  string actor = 2;
+  string reason = 3;
+  string name = 4;
+}
+
+message RulesetEnabled {
+  string ruleset_id = 1;
+  string actor = 2;
+  string name = 3;
+}
+
+message RulesetDeleted {
+  string ruleset_id = 1;
+  string actor = 2;
+  string name = 3;
+}
+
+// Product-ruleset linking events.
+
+message RulesetLinkedToProduct {
+  string product_id = 1;
+  string ruleset_id = 2;
+  string actor = 3;
+  string product_name = 4;
+  string ruleset_name = 5;
+}
+
+message RulesetUnlinkedFromProduct {
+  string product_id = 1;
+  string ruleset_id = 2;
+  string actor = 3;
+  string product_name = 4;
+  string ruleset_name = 5;
+}
+
+// Import events.
+
+message CatalogImported {
+  string filename = 1;
+  string actor = 2;
+  int32 ruleset_count = 3;
+  int32 product_count = 4;
+  repeated string product_ids = 5;
+  repeated string ruleset_ids = 6;
+}

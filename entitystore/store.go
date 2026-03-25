@@ -11,6 +11,7 @@ import (
 	"github.com/laenen-partners/entitystore/matching"
 	"github.com/laenen-partners/entitystore/store"
 	"github.com/laenen-partners/tags"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/laenen-partners/prodcat"
 	prodcatv1 "github.com/laenen-partners/prodcat/gen/prodcat/v1"
@@ -27,31 +28,20 @@ func init() {
 }
 
 // Store implements prodcat.Store backed by entitystore.
-// Accepts both *entitystore.EntityStore and *entitystore.ScopedStore.
-// When backed by a ScopedStore, all reads are filtered and all creates
-// are auto-tagged by the scope configuration (e.g. tenant, workspace).
 type Store struct {
 	es es.EntityStorer
 }
 
 // NewStore creates a new entitystore-backed Store.
-// Pass *entitystore.EntityStore for unscoped access, or
-// *entitystore.ScopedStore for tenant/workspace-scoped access.
 func NewStore(e es.EntityStorer) *Store {
 	return &Store{es: e}
 }
 
 // ─── Tag Helpers ───
 
-// productTags builds entitystore tags for a product by merging user-defined tags
-// with well-known system tags (status, entity type).
 func productTags(p prodcat.Product) []string {
 	set := tags.FromStrings(p.Tags)
-
-	// Entity type tag.
 	set, _ = set.With(tags.PrefixEntity, "product")
-
-	// Status tag.
 	if p.Disabled {
 		set, _ = set.With(tags.PrefixStatus, "disabled")
 		if p.DisabledReason != "" {
@@ -60,17 +50,12 @@ func productTags(p prodcat.Product) []string {
 	} else {
 		set, _ = set.With(tags.PrefixStatus, "active")
 	}
-
 	return set.Strings()
 }
 
-// rulesetTags builds entitystore tags for a ruleset using the tags lifecycle.
 func rulesetTags(r prodcat.Ruleset) []string {
 	set := tags.Set{}
-
-	// Entity type tag.
 	set, _ = set.With(tags.PrefixEntity, "ruleset")
-
 	if r.Disabled {
 		set, _ = set.With(tags.PrefixStatus, "disabled")
 		if r.DisabledReason != "" {
@@ -79,32 +64,101 @@ func rulesetTags(r prodcat.Ruleset) []string {
 	} else {
 		set, _ = set.With(tags.PrefixStatus, "active")
 	}
-
 	return set.Strings()
 }
 
-// statusDisabled returns the "status:disabled" tag string for use in preconditions.
 func statusDisabled() string {
 	s, _ := tags.Build(tags.PrefixStatus, "disabled")
 	return s
 }
 
+// ─── Event Conversion ───
+
+func eventsToProto(events []any) []proto.Message {
+	var result []proto.Message
+	for _, e := range events {
+		switch ev := e.(type) {
+		case *prodcat.ProductCreatedEvent:
+			result = append(result, &prodcatv1.ProductCreated{
+				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
+				Description: ev.Description, Tags: ev.Tags,
+				CurrencyCode: ev.CurrencyCode, BaseRulesetIds: ev.BaseRulesetIDs,
+			})
+		case *prodcat.ProductUpdatedEvent:
+			result = append(result, &prodcatv1.ProductUpdated{
+				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
+				Description: ev.Description, Tags: ev.Tags,
+				CurrencyCode: ev.CurrencyCode, BaseRulesetIds: ev.BaseRulesetIDs,
+			})
+		case *prodcat.ProductDisabledEvent:
+			result = append(result, &prodcatv1.ProductDisabled{
+				ProductId: ev.ProductID, Actor: ev.Actor, Reason: ev.Reason, Name: ev.Name,
+			})
+		case *prodcat.ProductEnabledEvent:
+			result = append(result, &prodcatv1.ProductEnabled{
+				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
+			})
+		case *prodcat.ProductDeletedEvent:
+			result = append(result, &prodcatv1.ProductDeleted{
+				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
+			})
+		case *prodcat.RulesetCreatedEvent:
+			result = append(result, &prodcatv1.RulesetCreated{
+				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
+				Description: ev.Description, Version: ev.Version,
+			})
+		case *prodcat.RulesetDisabledEvent:
+			result = append(result, &prodcatv1.RulesetDisabled{
+				RulesetId: ev.RulesetID, Actor: ev.Actor, Reason: ev.Reason, Name: ev.Name,
+			})
+		case *prodcat.RulesetEnabledEvent:
+			result = append(result, &prodcatv1.RulesetEnabled{
+				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
+			})
+		case *prodcat.RulesetDeletedEvent:
+			result = append(result, &prodcatv1.RulesetDeleted{
+				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
+			})
+		case *prodcat.RulesetLinkedToProductEvent:
+			result = append(result, &prodcatv1.RulesetLinkedToProduct{
+				ProductId: ev.ProductID, RulesetId: ev.RulesetID, Actor: ev.Actor,
+				ProductName: ev.ProductName, RulesetName: ev.RulesetName,
+			})
+		case *prodcat.RulesetUnlinkedFromProductEvent:
+			result = append(result, &prodcatv1.RulesetUnlinkedFromProduct{
+				ProductId: ev.ProductID, RulesetId: ev.RulesetID, Actor: ev.Actor,
+				ProductName: ev.ProductName, RulesetName: ev.RulesetName,
+			})
+		case *prodcat.CatalogImportedEvent:
+			result = append(result, &prodcatv1.CatalogImported{
+				Filename: ev.Filename, Actor: ev.Actor,
+				RulesetCount: int32(ev.RulesetCount), ProductCount: int32(ev.ProductCount),
+				ProductIds: ev.ProductIDs, RulesetIds: ev.RulesetIDs,
+			})
+		}
+	}
+	return result
+}
+
+// eventOpts converts domain events to a WriteOpOption slice.
+func eventOpts(events []any) []store.WriteOpOption {
+	protoEvents := eventsToProto(events)
+	if len(protoEvents) > 0 {
+		return []store.WriteOpOption{store.WithEvents(protoEvents...)}
+	}
+	return nil
+}
+
 // ─── Products ───
 
-// CreateProduct creates a new product, failing with ErrAlreadyExists if the ProductID is taken.
-// Uses entitystore MustNotExist precondition for transactional uniqueness.
-func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance) error {
+func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 
-	writeOp := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate,
-		store.WithTags(productTags(p)...),
-	)
+	opts := append([]store.WriteOpOption{store.WithTags(productTags(p)...)}, eventOpts(events)...)
+	writeOp := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate, opts...)
 
-	// Build ruleset preconditions — each referenced ruleset must exist and not be disabled.
 	rulesetPCs := rulesetPreConditions(p.BaseRulesetIDs)
-
-	// Product must not already exist.
 	pcs := append([]store.PreCondition{
 		{
 			EntityType:   cfg.EntityType,
@@ -114,47 +168,35 @@ func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product, prov prodc
 	}, rulesetPCs...)
 
 	_, err := s.es.BatchWrite(ctx, []store.BatchWriteOp{
-		{
-			WriteEntity:   writeOp,
-			PreConditions: pcs,
-		},
+		{WriteEntity: writeOp, PreConditions: pcs},
 	})
 	return mapPreConditionError(err)
 }
 
-// PutProduct upserts a product. When the product references rulesets, the store verifies
-// each one exists and is not disabled via entitystore preconditions.
-func (s *Store) PutProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance) error {
+func (s *Store) PutProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 	rulesetPCs := rulesetPreConditions(p.BaseRulesetIDs)
 
 	anchors := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate).Anchors
-
 	existing, err := s.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
 	if err != nil {
 		return fmt.Errorf("find entity: %w", err)
 	}
 
 	allTags := productTags(p)
+	opts := append([]store.WriteOpOption{store.WithTags(allTags...)}, eventOpts(events)...)
 
 	var writeOp *store.WriteEntityOp
 	if len(existing) > 0 {
-		writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionUpdate,
-			store.WithMatchedEntityID(existing[0].ID),
-			store.WithTags(allTags...),
-		)
+		opts = append(opts, store.WithMatchedEntityID(existing[0].ID))
+		writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionUpdate, opts...)
 	} else {
-		writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionCreate,
-			store.WithTags(allTags...),
-		)
+		writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionCreate, opts...)
 	}
 
 	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{
-		{
-			WriteEntity:   writeOp,
-			PreConditions: rulesetPCs,
-		},
+		{WriteEntity: writeOp, PreConditions: rulesetPCs},
 	})
 	return mapPreConditionError(err)
 }
@@ -197,17 +239,23 @@ func (s *Store) ListProducts(ctx context.Context, filter prodcat.ListFilter) ([]
 	return result, nil
 }
 
+func (s *Store) DeleteProduct(ctx context.Context, productID string) error {
+	cfg := prodcatv1.ProductMatchConfig()
+	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "product_id", productID)
+	if err != nil {
+		return err
+	}
+	return s.es.DeleteEntity(ctx, entity.ID)
+}
+
 // ─── Rulesets ───
 
-// CreateRuleset creates a new ruleset, failing with ErrAlreadyExists if the ID is taken.
-// Uses entitystore MustNotExist precondition for transactional uniqueness.
-func (s *Store) CreateRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance) error {
+func (s *Store) CreateRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 
-	writeOp := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate,
-		store.WithTags(rulesetTags(r)...),
-	)
+	opts := append([]store.WriteOpOption{store.WithTags(rulesetTags(r)...)}, eventOpts(events)...)
+	writeOp := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
 
 	_, err := s.es.BatchWrite(ctx, []store.BatchWriteOp{
 		{
@@ -224,30 +272,25 @@ func (s *Store) CreateRuleset(ctx context.Context, r prodcat.Ruleset, prov prodc
 	return mapPreConditionError(err)
 }
 
-// PutRuleset upserts a ruleset. Uses tags lifecycle for status management:
-// disabled rulesets get "status:disabled" + "disabled-reason:<reason>" tags.
-func (s *Store) PutRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance) error {
+func (s *Store) PutRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 	allTags := rulesetTags(r)
 
 	anchors := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate).Anchors
-
 	existing, err := s.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
 	if err != nil {
 		return fmt.Errorf("find entity: %w", err)
 	}
 
+	opts := append([]store.WriteOpOption{store.WithTags(allTags...)}, eventOpts(events)...)
+
 	var writeOp *store.WriteEntityOp
 	if len(existing) > 0 {
-		writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionUpdate,
-			store.WithMatchedEntityID(existing[0].ID),
-			store.WithTags(allTags...),
-		)
+		opts = append(opts, store.WithMatchedEntityID(existing[0].ID))
+		writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionUpdate, opts...)
 	} else {
-		writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate,
-			store.WithTags(allTags...),
-		)
+		writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
 	}
 
 	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{
@@ -287,6 +330,49 @@ func (s *Store) ListRulesets(ctx context.Context) ([]prodcat.Ruleset, error) {
 	return result, nil
 }
 
+func (s *Store) DeleteRuleset(ctx context.Context, id string) error {
+	cfg := prodcatv1.RulesetMatchConfig()
+	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "ruleset_id", id)
+	if err != nil {
+		return err
+	}
+	return s.es.DeleteEntity(ctx, entity.ID)
+}
+
+// ─── Graph Relations ───
+
+func (s *Store) LinkRulesetToProduct(ctx context.Context, productID, rulesetID string) error {
+	productEntity, err := s.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
+	if err != nil {
+		return fmt.Errorf("find product: %w", err)
+	}
+	rulesetEntity, err := s.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
+	if err != nil {
+		return fmt.Errorf("find ruleset: %w", err)
+	}
+	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{{
+		UpsertRelation: &store.UpsertRelationOp{
+			SourceID:     productEntity.ID,
+			TargetID:     rulesetEntity.ID,
+			RelationType: "has_ruleset",
+			Confidence:   1.0,
+		},
+	}})
+	return err
+}
+
+func (s *Store) UnlinkRulesetFromProduct(ctx context.Context, productID, rulesetID string) error {
+	productEntity, err := s.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
+	if err != nil {
+		return fmt.Errorf("find product: %w", err)
+	}
+	rulesetEntity, err := s.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
+	if err != nil {
+		return fmt.Errorf("find ruleset: %w", err)
+	}
+	return s.es.DeleteRelationByKey(ctx, productEntity.ID, rulesetEntity.ID, "has_ruleset")
+}
+
 // ─── Generic helpers ───
 
 func (s *Store) getEntityByAnchor(ctx context.Context, entityType, field, value string) (matching.StoredEntity, error) {
@@ -296,7 +382,6 @@ func (s *Store) getEntityByAnchor(ctx context.Context, entityType, field, value 
 			value = fn(value)
 		}
 	}
-
 	entities, err := s.es.FindByAnchors(ctx, entityType, []matching.AnchorQuery{
 		{Field: field, Value: value},
 	}, nil)
@@ -309,8 +394,6 @@ func (s *Store) getEntityByAnchor(ctx context.Context, entityType, field, value 
 	return entities[0], nil
 }
 
-// rulesetPreConditions builds preconditions that verify each referenced ruleset
-// exists and is not disabled. Uses the well-known "status:disabled" tag.
 func rulesetPreConditions(rulesetIDs []string) []store.PreCondition {
 	if len(rulesetIDs) == 0 {
 		return nil
@@ -329,7 +412,6 @@ func rulesetPreConditions(rulesetIDs []string) []store.PreCondition {
 	return pcs
 }
 
-// mapPreConditionError translates entitystore PreConditionError into prodcat sentinel errors.
 func mapPreConditionError(err error) error {
 	if err == nil {
 		return nil
@@ -366,13 +448,10 @@ func productToProto(p prodcat.Product) *prodcatv1.Product {
 	if len(p.Ruleset) > 0 {
 		meta["ruleset"] = string(p.Ruleset)
 	}
-
-	// Store disabled state in proto status field for query support.
 	status := "active"
 	if p.Disabled {
 		status = "disabled"
 	}
-
 	return &prodcatv1.Product{
 		ProductId:       p.ProductID,
 		Name:            p.Name,
@@ -386,11 +465,8 @@ func productToProto(p prodcat.Product) *prodcatv1.Product {
 }
 
 func productFromProto(pb *prodcatv1.Product, storedTags []string) prodcat.Product {
-	// Separate user tags from system tags.
 	set := tags.FromStrings(storedTags)
 	userSet := set.Without(tags.PrefixStatus, "status_reason", tags.PrefixEntity)
-
-	// Derive disabled state from tags.
 	statusVal, _ := set.Get(tags.PrefixStatus)
 	disabled := statusVal == "disabled"
 	var disabledReason prodcat.DisabledReason
@@ -399,7 +475,6 @@ func productFromProto(pb *prodcatv1.Product, storedTags []string) prodcat.Produc
 			disabledReason = prodcat.DisabledReason(reason)
 		}
 	}
-
 	p := prodcat.Product{
 		ProductID:       pb.ProductId,
 		Name:            pb.Name,

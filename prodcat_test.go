@@ -506,3 +506,69 @@ func TestValidateRulesetContent(t *testing.T) {
 		assert.Contains(t, err.Error(), "cache_ttl")
 	})
 }
+
+// ─── Soft Delete ───
+
+func TestDeleteProduct(t *testing.T) {
+	client, _ := sharedTestClient(t)
+	ctx := context.Background()
+	prov := prodcat.Provenance{SourceURN: "test:delete-product"}
+
+	_, err := client.RegisterProduct(ctx, prodcat.Product{
+		ProductID: "delete-me", Name: "Delete Me",
+	}, prov)
+	require.NoError(t, err)
+
+	err = client.DeleteProduct(ctx, "delete-me", prov)
+	require.NoError(t, err)
+
+	_, err = client.GetProduct(ctx, "delete-me")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, prodcat.ErrNotFound))
+}
+
+func TestDeleteRuleset(t *testing.T) {
+	client, _ := sharedTestClient(t)
+	ctx := context.Background()
+	prov := prodcat.Provenance{SourceURN: "test:delete-ruleset"}
+
+	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
+		ID: "delete-me-rs", Name: "Delete Me", Content: validRulesetContent(),
+	}, prov)
+	require.NoError(t, err)
+
+	err = client.DeleteRuleset(ctx, "delete-me-rs", prov)
+	require.NoError(t, err)
+
+	_, err = client.GetRuleset(ctx, "delete-me-rs")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, prodcat.ErrNotFound))
+}
+
+// ─── Graph Relations ───
+
+func TestAddRuleset_CreatesGraphRelation(t *testing.T) {
+	client, _ := sharedTestClient(t)
+	ctx := context.Background()
+	prov := prodcat.Provenance{SourceURN: "test:graph-link"}
+
+	_, err := client.RegisterProduct(ctx, prodcat.Product{
+		ProductID: "graph-test", Name: "Graph Test",
+	}, prov)
+	require.NoError(t, err)
+
+	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
+		ID: "graph-rs", Name: "Graph RS", Content: validRulesetContent(),
+	}, prov)
+	require.NoError(t, err)
+
+	// AddRuleset should create both the BaseRulesetIDs entry and the graph relation.
+	p, err := client.AddRuleset(ctx, "graph-test", "graph-rs", prov)
+	require.NoError(t, err)
+	assert.Contains(t, p.BaseRulesetIDs, "graph-rs")
+
+	// RemoveRuleset should remove both.
+	p, err = client.RemoveRuleset(ctx, "graph-test", "graph-rs", prov)
+	require.NoError(t, err)
+	assert.Empty(t, p.BaseRulesetIDs)
+}
