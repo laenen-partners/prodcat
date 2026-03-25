@@ -813,10 +813,11 @@ type CatalogImported struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Actor         string                 `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
-	RulesetCount  int32                  `protobuf:"varint,3,opt,name=ruleset_count,json=rulesetCount,proto3" json:"ruleset_count,omitempty"`
-	ProductCount  int32                  `protobuf:"varint,4,opt,name=product_count,json=productCount,proto3" json:"product_count,omitempty"`
-	ProductIds    []string               `protobuf:"bytes,5,rep,name=product_ids,json=productIds,proto3" json:"product_ids,omitempty"`
-	RulesetIds    []string               `protobuf:"bytes,6,rep,name=ruleset_ids,json=rulesetIds,proto3" json:"ruleset_ids,omitempty"`
+	FileHash      string                 `protobuf:"bytes,3,opt,name=file_hash,json=fileHash,proto3" json:"file_hash,omitempty"`
+	RulesetCount  int32                  `protobuf:"varint,4,opt,name=ruleset_count,json=rulesetCount,proto3" json:"ruleset_count,omitempty"`
+	ProductCount  int32                  `protobuf:"varint,5,opt,name=product_count,json=productCount,proto3" json:"product_count,omitempty"`
+	ProductIds    []string               `protobuf:"bytes,6,rep,name=product_ids,json=productIds,proto3" json:"product_ids,omitempty"`
+	RulesetIds    []string               `protobuf:"bytes,7,rep,name=ruleset_ids,json=rulesetIds,proto3" json:"ruleset_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -861,6 +862,13 @@ func (x *CatalogImported) GetFilename() string {
 func (x *CatalogImported) GetActor() string {
 	if x != nil {
 		return x.Actor
+	}
+	return ""
+}
+
+func (x *CatalogImported) GetFileHash() string {
+	if x != nil {
+		return x.FileHash
 	}
 	return ""
 }
@@ -971,15 +979,16 @@ const file_prodcat_v1_events_proto_rawDesc = "" +
 	"ruleset_id\x18\x02 \x01(\tR\trulesetId\x12\x14\n" +
 	"\x05actor\x18\x03 \x01(\tR\x05actor\x12!\n" +
 	"\fproduct_name\x18\x04 \x01(\tR\vproductName\x12!\n" +
-	"\fruleset_name\x18\x05 \x01(\tR\vrulesetName\"\xcf\x01\n" +
+	"\fruleset_name\x18\x05 \x01(\tR\vrulesetName\"\xec\x01\n" +
 	"\x0fCatalogImported\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x14\n" +
-	"\x05actor\x18\x02 \x01(\tR\x05actor\x12#\n" +
-	"\rruleset_count\x18\x03 \x01(\x05R\frulesetCount\x12#\n" +
-	"\rproduct_count\x18\x04 \x01(\x05R\fproductCount\x12\x1f\n" +
-	"\vproduct_ids\x18\x05 \x03(\tR\n" +
+	"\x05actor\x18\x02 \x01(\tR\x05actor\x12\x1b\n" +
+	"\tfile_hash\x18\x03 \x01(\tR\bfileHash\x12#\n" +
+	"\rruleset_count\x18\x04 \x01(\x05R\frulesetCount\x12#\n" +
+	"\rproduct_count\x18\x05 \x01(\x05R\fproductCount\x12\x1f\n" +
+	"\vproduct_ids\x18\x06 \x03(\tR\n" +
 	"productIds\x12\x1f\n" +
-	"\vruleset_ids\x18\x06 \x03(\tR\n" +
+	"\vruleset_ids\x18\a \x03(\tR\n" +
 	"rulesetIdsB=Z;github.com/laenen-partners/prodcat/gen/prodcat/v1;prodcatv1b\x06proto3"
 
 var (

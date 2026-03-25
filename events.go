@@ -107,6 +107,7 @@ type RulesetUnlinkedFromProductEvent struct {
 type CatalogImportedEvent struct {
 	Filename     string
 	Actor        string
+	FileHash     string
 	RulesetCount int
 	ProductCount int
 	ProductIDs   []string

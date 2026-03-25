@@ -2,6 +2,7 @@ package prodcat
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -87,6 +88,11 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, track
 	}
 
 	prov := Provenance{SourceURN: "import:" + filename}
+	fileHash := fmt.Sprintf("%x", sha256.Sum256(data))
+
+	// Collect IDs for the import event.
+	rulesetIDs := make([]string, 0, len(def.Rulesets))
+	productIDs := make([]string, 0, len(def.Products))
 
 	// Import rulesets first (products reference them).
 	// Use PutRuleset (upsert) for idempotency.
@@ -107,6 +113,7 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, track
 		}, prov); err != nil {
 			return fmt.Errorf("put ruleset %s: %w", rs.ID, err)
 		}
+		rulesetIDs = append(rulesetIDs, rs.ID)
 	}
 
 	// Import products — upsert for idempotency.
@@ -125,11 +132,18 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, track
 		}, prov); err != nil {
 			return fmt.Errorf("upsert product %s: %w", p.ProductID, err)
 		}
+		productIDs = append(productIDs, p.ProductID)
 	}
+
+	// Log the import event.
+	c.logger.InfoContext(ctx, "catalog imported",
+		"filename", filename, "file_hash", fileHash,
+		"rulesets", len(rulesetIDs), "products", len(productIDs))
 
 	if tracker != nil {
 		if err := tracker.RecordImported(ctx, ImportRecord{
 			Filename:  filename,
+			Checksum:  fileHash,
 			AppliedAt: time.Now().UTC(),
 		}); err != nil {
 			// ErrAlreadyExists means a concurrent import recorded it first — that's fine.

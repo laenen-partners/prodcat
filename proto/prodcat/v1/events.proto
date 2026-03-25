@@ -97,8 +97,9 @@ message RulesetUnlinkedFromProduct {
 message CatalogImported {
   string filename = 1;
   string actor = 2;
-  int32 ruleset_count = 3;
-  int32 product_count = 4;
-  repeated string product_ids = 5;
-  repeated string ruleset_ids = 6;
+  string file_hash = 3;
+  int32 ruleset_count = 4;
+  int32 product_count = 5;
+  repeated string product_ids = 6;
+  repeated string ruleset_ids = 7;
 }

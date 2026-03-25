@@ -131,7 +131,7 @@ func eventsToProto(events []any) []proto.Message {
 			})
 		case *prodcat.CatalogImportedEvent:
 			result = append(result, &prodcatv1.CatalogImported{
-				Filename: ev.Filename, Actor: ev.Actor,
+				Filename: ev.Filename, Actor: ev.Actor, FileHash: ev.FileHash,
 				RulesetCount: int32(ev.RulesetCount), ProductCount: int32(ev.ProductCount),
 				ProductIds: ev.ProductIDs, RulesetIds: ev.RulesetIDs,
 			})
