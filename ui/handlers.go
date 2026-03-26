@@ -71,7 +71,7 @@ func (h *Handlers) ProductList() http.HandlerFunc {
 		products, err := h.client.ListProducts(r.Context(), filter)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "prodcat ui: list products", "error", err)
-			ds.Send.Toast(sse, ds.ToastError, "Failed to load products")
+			_ = ds.Send.Toast(sse, ds.ToastError, "Failed to load products")
 			return
 		}
 
@@ -86,7 +86,7 @@ func (h *Handlers) ProductList() http.HandlerFunc {
 			products = filtered
 		}
 
-		ds.Send.Patch(sse, ProductListTable(products, scope.CanEdit, signals))
+		_ = ds.Send.Patch(sse, ProductListTable(products, scope.CanEdit, signals))
 	}
 }
 
@@ -107,7 +107,7 @@ func (h *Handlers) ProductDetail() http.HandlerFunc {
 		}
 
 		sse := datastar.NewSSE(w, r)
-		ds.Send.Drawer(sse, ProductDetailContent(product), ds.WithDrawerMaxWidth("max-w-xl"))
+		_ = ds.Send.Drawer(sse, ProductDetailContent(product), ds.WithDrawerMaxWidth("max-w-xl"))
 	}
 }
 
@@ -122,7 +122,7 @@ func (h *Handlers) RulesetList() http.HandlerFunc {
 		rulesets, err := h.client.ListRulesets(r.Context())
 		if err != nil {
 			slog.ErrorContext(r.Context(), "prodcat ui: list rulesets", "error", err)
-			ds.Send.Toast(sse, ds.ToastError, "Failed to load rulesets")
+			_ = ds.Send.Toast(sse, ds.ToastError, "Failed to load rulesets")
 			return
 		}
 
@@ -137,7 +137,7 @@ func (h *Handlers) RulesetList() http.HandlerFunc {
 			rulesets = filtered
 		}
 
-		ds.Send.Patch(sse, RulesetListTable(rulesets, scope.CanEdit, signals))
+		_ = ds.Send.Patch(sse, RulesetListTable(rulesets, scope.CanEdit, signals))
 	}
 }
 
@@ -159,7 +159,7 @@ func (h *Handlers) RulesetDetail() http.HandlerFunc {
 
 		scope := h.scopeFromRequest(r)
 		sse := datastar.NewSSE(w, r)
-		ds.Send.Drawer(sse, RulesetDetailContent(ruleset, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
+		_ = ds.Send.Drawer(sse, RulesetDetailContent(ruleset, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
 	}
 }
 
@@ -171,7 +171,7 @@ func (h *Handlers) DisableRuleset() http.HandlerFunc {
 
 		scope := h.scopeFromRequest(r)
 		if !scope.CanEdit {
-			ds.Send.Toast(sse, ds.ToastError, "You do not have permission to disable rulesets")
+			_ = ds.Send.Toast(sse, ds.ToastError, "You do not have permission to disable rulesets")
 			return
 		}
 
@@ -179,12 +179,12 @@ func (h *Handlers) DisableRuleset() http.HandlerFunc {
 		rs, err := h.client.DisableRuleset(r.Context(), rulesetID, prodcat.DisabledReasonDeleted, prov)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "prodcat ui: disable ruleset", "ruleset_id", rulesetID, "error", err)
-			ds.Send.Toast(sse, ds.ToastError, "Failed to disable ruleset")
+			_ = ds.Send.Toast(sse, ds.ToastError, "Failed to disable ruleset")
 			return
 		}
 
-		ds.Send.Drawer(sse, RulesetDetailContent(rs, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
-		ds.Send.Toast(sse, ds.ToastSuccess, "Ruleset disabled")
+		_ = ds.Send.Drawer(sse, RulesetDetailContent(rs, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
+		_ = ds.Send.Toast(sse, ds.ToastSuccess, "Ruleset disabled")
 	}
 }
 
@@ -196,7 +196,7 @@ func (h *Handlers) EnableRuleset() http.HandlerFunc {
 
 		scope := h.scopeFromRequest(r)
 		if !scope.CanEdit {
-			ds.Send.Toast(sse, ds.ToastError, "You do not have permission to enable rulesets")
+			_ = ds.Send.Toast(sse, ds.ToastError, "You do not have permission to enable rulesets")
 			return
 		}
 
@@ -204,12 +204,12 @@ func (h *Handlers) EnableRuleset() http.HandlerFunc {
 		rs, err := h.client.EnableRuleset(r.Context(), rulesetID, prov)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "prodcat ui: enable ruleset", "ruleset_id", rulesetID, "error", err)
-			ds.Send.Toast(sse, ds.ToastError, "Failed to enable ruleset")
+			_ = ds.Send.Toast(sse, ds.ToastError, "Failed to enable ruleset")
 			return
 		}
 
-		ds.Send.Drawer(sse, RulesetDetailContent(rs, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
-		ds.Send.Toast(sse, ds.ToastSuccess, "Ruleset enabled")
+		_ = ds.Send.Drawer(sse, RulesetDetailContent(rs, scope.CanEdit), ds.WithDrawerMaxWidth("max-w-2xl"))
+		_ = ds.Send.Toast(sse, ds.ToastSuccess, "Ruleset enabled")
 	}
 }
 

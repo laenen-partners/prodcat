@@ -84,10 +84,9 @@ func main() {
 
 // setupResult holds the clients produced by setupRPC.
 type setupResult struct {
-	rpcClient      *prodcatrpc.Client // scoped — for UI/RPC handlers
-	seedClient     *prodcat.Client    // scoped — for seeding (auto-tags tenant)
-	unscopedClient *prodcat.Client    // unscoped — if needed for system ops
-	tracker        prodcat.ImportTracker
+	rpcClient  *prodcatrpc.Client // scoped — for UI/RPC handlers
+	seedClient *prodcat.Client    // scoped — for seeding (auto-tags tenant)
+	tracker    prodcat.ImportTracker
 }
 
 func setupRPC(ctx context.Context) (*setupResult, error) {
@@ -167,7 +166,7 @@ func seedData(ctx context.Context, client *prodcat.Client, tracker prodcat.Impor
 	prov := prodcat.Provenance{SourceURN: "showcase:seed", Reason: "showcase extra data"}
 
 	// Add a disabled product to showcase the disabled state.
-	client.RegisterProduct(ctx, prodcat.Product{
+	_, _ = client.RegisterProduct(ctx, prodcat.Product{
 		ProductID:    "usd-account",
 		Name:         "USD Account",
 		Description:  "Multi-currency USD account — disabled pending regulatory review",
@@ -175,7 +174,7 @@ func seedData(ctx context.Context, client *prodcat.Client, tracker prodcat.Impor
 		CurrencyCode: "USD",
 		Availability: prodcat.GeoAvailability{Mode: prodcat.AvailabilityModeGlobal},
 	}, prov)
-	client.DisableProduct(ctx, "usd-account", prodcat.DisabledReasonRegulatoryHold, prov)
+	_, _ = client.DisableProduct(ctx, "usd-account", prodcat.DisabledReasonRegulatoryHold, prov)
 
 	slog.Info("showcase data seeded", "catalog_files", len(files))
 	return nil
