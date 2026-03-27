@@ -32,8 +32,10 @@ type Ruleset struct {
 	Content        string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	Disabled       bool                   `protobuf:"varint,6,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	DisabledReason string                 `protobuf:"bytes,7,opt,name=disabled_reason,json=disabledReason,proto3" json:"disabled_reason,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// SHA-256 hash of content, computed on write.
+	ContentHash   string `protobuf:"bytes,8,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Ruleset) Reset() {
@@ -115,12 +117,19 @@ func (x *Ruleset) GetDisabledReason() string {
 	return ""
 }
 
+func (x *Ruleset) GetContentHash() string {
+	if x != nil {
+		return x.ContentHash
+	}
+	return ""
+}
+
 var File_prodcat_v1_ruleset_proto protoreflect.FileDescriptor
 
 const file_prodcat_v1_ruleset_proto_rawDesc = "" +
 	"\n" +
 	"\x18prodcat/v1/ruleset.proto\x12\n" +
-	"prodcat.v1\x1a\x1centitystore/v1/options.proto\"\x95\x02\n" +
+	"prodcat.v1\x1a\x1centitystore/v1/options.proto\"\xb8\x02\n" +
 	"\aRuleset\x12.\n" +
 	"\n" +
 	"ruleset_id\x18\x01 \x01(\tB\x0f\x82\xb5\x18\v\b\x01\x10\x01\x1d\x00\x00\x80?(\x01R\trulesetId\x12\x1c\n" +
@@ -129,7 +138,8 @@ const file_prodcat_v1_ruleset_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x18\n" +
 	"\acontent\x18\x05 \x01(\tR\acontent\x12\x1a\n" +
 	"\bdisabled\x18\x06 \x01(\bR\bdisabled\x12'\n" +
-	"\x0fdisabled_reason\x18\a \x01(\tR\x0edisabledReason:\x19\x82\xb5\x18\x15\n" +
+	"\x0fdisabled_reason\x18\a \x01(\tR\x0edisabledReason\x12!\n" +
+	"\fcontent_hash\x18\b \x01(\tR\vcontentHash:\x19\x82\xb5\x18\x15\n" +
 	"\n" +
 	"\r33s?\x15\xcd\xccL?b\aRulesetB=Z;github.com/laenen-partners/prodcat/gen/prodcat/v1;prodcatv1b\x06proto3"
 

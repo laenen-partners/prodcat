@@ -2,7 +2,16 @@
 // Rule evaluation lives in the onboarding package.
 package prodcat
 
-import "time"
+import (
+	"crypto/sha256"
+	"fmt"
+	"time"
+)
+
+// ContentHashOf returns the SHA-256 hex digest of the given content.
+func ContentHashOf(content []byte) string {
+	return fmt.Sprintf("%x", sha256.Sum256(content))
+}
 
 // AvailabilityMode defines how geographic availability is interpreted.
 type AvailabilityMode string
@@ -57,6 +66,7 @@ type Ruleset struct {
 	Name           string         `json:"name"`
 	Description    string         `json:"description"`
 	Content        []byte         `json:"content"`
+	ContentHash    string         `json:"content_hash"`
 	Version        string         `json:"version"`
 	Disabled       bool           `json:"disabled"`
 	DisabledReason DisabledReason `json:"disabled_reason,omitempty"`

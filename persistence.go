@@ -1,5 +1,4 @@
-// Package entitystore provides an entitystore-backed implementation of prodcat.Store.
-package entitystore
+package prodcat
 
 import (
 	"context"
@@ -7,13 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	es "github.com/laenen-partners/entitystore"
 	"github.com/laenen-partners/entitystore/matching"
 	"github.com/laenen-partners/entitystore/store"
 	"github.com/laenen-partners/tags"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/laenen-partners/prodcat"
 	prodcatv1 "github.com/laenen-partners/prodcat/gen/prodcat/v1"
 )
 
@@ -24,22 +21,11 @@ func init() {
 	matchRegistry = matching.NewMatchConfigRegistry()
 	matchRegistry.Register(prodcatv1.ProductMatchConfig())
 	matchRegistry.Register(prodcatv1.RulesetMatchConfig())
-	matchRegistry.Register(prodcatv1.ImportRecordMatchConfig())
-}
-
-// Store implements prodcat.Store backed by entitystore.
-type Store struct {
-	es es.EntityStorer
-}
-
-// NewStore creates a new entitystore-backed Store.
-func NewStore(e es.EntityStorer) *Store {
-	return &Store{es: e}
 }
 
 // ─── Tag Helpers ───
 
-func productTags(p prodcat.Product) []string {
+func productTags(p Product) []string {
 	set := tags.FromStrings(p.Tags)
 	set, _ = set.With(tags.PrefixEntity, "product")
 	if p.Disabled {
@@ -53,7 +39,7 @@ func productTags(p prodcat.Product) []string {
 	return set.Strings()
 }
 
-func rulesetTags(r prodcat.Ruleset) []string {
+func rulesetTags(r Ruleset) []string {
 	set := tags.Set{}
 	set, _ = set.With(tags.PrefixEntity, "ruleset")
 	if r.Disabled {
@@ -78,58 +64,63 @@ func eventsToProto(events []any) []proto.Message {
 	var result []proto.Message
 	for _, e := range events {
 		switch ev := e.(type) {
-		case *prodcat.ProductCreatedEvent:
+		case *ProductCreatedEvent:
 			result = append(result, &prodcatv1.ProductCreated{
 				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
 				Description: ev.Description, Tags: ev.Tags,
 				CurrencyCode: ev.CurrencyCode, BaseRulesetIds: ev.BaseRulesetIDs,
 			})
-		case *prodcat.ProductUpdatedEvent:
+		case *ProductUpdatedEvent:
 			result = append(result, &prodcatv1.ProductUpdated{
 				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
 				Description: ev.Description, Tags: ev.Tags,
 				CurrencyCode: ev.CurrencyCode, BaseRulesetIds: ev.BaseRulesetIDs,
 			})
-		case *prodcat.ProductDisabledEvent:
+		case *ProductDisabledEvent:
 			result = append(result, &prodcatv1.ProductDisabled{
 				ProductId: ev.ProductID, Actor: ev.Actor, Reason: ev.Reason, Name: ev.Name,
 			})
-		case *prodcat.ProductEnabledEvent:
+		case *ProductEnabledEvent:
 			result = append(result, &prodcatv1.ProductEnabled{
 				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
 			})
-		case *prodcat.ProductDeletedEvent:
+		case *ProductDeletedEvent:
 			result = append(result, &prodcatv1.ProductDeleted{
 				ProductId: ev.ProductID, Actor: ev.Actor, Name: ev.Name,
 			})
-		case *prodcat.RulesetCreatedEvent:
+		case *RulesetCreatedEvent:
 			result = append(result, &prodcatv1.RulesetCreated{
 				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
 				Description: ev.Description, Version: ev.Version,
 			})
-		case *prodcat.RulesetDisabledEvent:
+		case *RulesetUpdatedEvent:
+			result = append(result, &prodcatv1.RulesetUpdated{
+				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
+				Description: ev.Description, Version: ev.Version,
+			})
+		case *RulesetDisabledEvent:
 			result = append(result, &prodcatv1.RulesetDisabled{
 				RulesetId: ev.RulesetID, Actor: ev.Actor, Reason: ev.Reason, Name: ev.Name,
 			})
-		case *prodcat.RulesetEnabledEvent:
+		case *RulesetEnabledEvent:
 			result = append(result, &prodcatv1.RulesetEnabled{
 				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
 			})
-		case *prodcat.RulesetDeletedEvent:
+		case *RulesetDeletedEvent:
 			result = append(result, &prodcatv1.RulesetDeleted{
 				RulesetId: ev.RulesetID, Actor: ev.Actor, Name: ev.Name,
 			})
-		case *prodcat.RulesetLinkedToProductEvent:
+		case *RulesetLinkedToProductEvent:
 			result = append(result, &prodcatv1.RulesetLinkedToProduct{
 				ProductId: ev.ProductID, RulesetId: ev.RulesetID, Actor: ev.Actor,
 				ProductName: ev.ProductName, RulesetName: ev.RulesetName,
 			})
-		case *prodcat.RulesetUnlinkedFromProductEvent:
+		case *RulesetUnlinkedFromProductEvent:
 			result = append(result, &prodcatv1.RulesetUnlinkedFromProduct{
 				ProductId: ev.ProductID, RulesetId: ev.RulesetID, Actor: ev.Actor,
 				ProductName: ev.ProductName, RulesetName: ev.RulesetName,
 			})
-		case *prodcat.CatalogImportedEvent:
+		case *CatalogImportedEvent:
 			result = append(result, &prodcatv1.CatalogImported{
 				Filename: ev.Filename, Actor: ev.Actor, FileHash: ev.FileHash,
 				RulesetCount: int32(ev.RulesetCount), ProductCount: int32(ev.ProductCount),
@@ -140,7 +131,6 @@ func eventsToProto(events []any) []proto.Message {
 	return result
 }
 
-// eventOpts converts domain events to a WriteOpOption slice.
 func eventOpts(events []any) []store.WriteOpOption {
 	protoEvents := eventsToProto(events)
 	if len(protoEvents) > 0 {
@@ -149,9 +139,9 @@ func eventOpts(events []any) []store.WriteOpOption {
 	return nil
 }
 
-// ─── Products ───
+// ─── Products (persistence) ───
 
-func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance, events ...any) error {
+func (c *Client) createProduct(ctx context.Context, p Product, prov Provenance, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 
@@ -167,19 +157,19 @@ func (s *Store) CreateProduct(ctx context.Context, p prodcat.Product, prov prodc
 		},
 	}, rulesetPCs...)
 
-	_, err := s.es.BatchWrite(ctx, []store.BatchWriteOp{
+	_, err := c.es.BatchWrite(ctx, []store.BatchWriteOp{
 		{WriteEntity: writeOp, PreConditions: pcs},
 	})
 	return mapPreConditionError(err)
 }
 
-func (s *Store) PutProduct(ctx context.Context, p prodcat.Product, prov prodcat.Provenance, events ...any) error {
+func (c *Client) putProduct(ctx context.Context, p Product, prov Provenance, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 	rulesetPCs := rulesetPreConditions(p.BaseRulesetIDs)
 
 	anchors := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate).Anchors
-	existing, err := s.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
+	existing, err := c.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
 	if err != nil {
 		return fmt.Errorf("find entity: %w", err)
 	}
@@ -195,15 +185,15 @@ func (s *Store) PutProduct(ctx context.Context, p prodcat.Product, prov prodcat.
 		writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionCreate, opts...)
 	}
 
-	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{
+	_, err = c.es.BatchWrite(ctx, []store.BatchWriteOp{
 		{WriteEntity: writeOp, PreConditions: rulesetPCs},
 	})
 	return mapPreConditionError(err)
 }
 
-func (s *Store) GetProduct(ctx context.Context, productID string) (*prodcat.Product, error) {
+func (c *Client) getProduct(ctx context.Context, productID string) (*Product, error) {
 	cfg := prodcatv1.ProductMatchConfig()
-	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "product_id", productID)
+	entity, err := c.getEntityByAnchor(ctx, cfg.EntityType, "product_id", productID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,13 +205,13 @@ func (s *Store) GetProduct(ctx context.Context, productID string) (*prodcat.Prod
 	return &p, nil
 }
 
-func (s *Store) ListProducts(ctx context.Context, filter prodcat.ListFilter) ([]prodcat.Product, error) {
+func (c *Client) listProducts(ctx context.Context, filter ListFilter) ([]Product, error) {
 	cfg := prodcatv1.ProductMatchConfig()
-	entities, err := s.es.GetEntitiesByType(ctx, cfg.EntityType, 1000, nil, nil)
+	entities, err := c.es.GetEntitiesByType(ctx, cfg.EntityType, 1000, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list products: %w", err)
 	}
-	var result []prodcat.Product
+	var result []Product
 	for _, e := range entities {
 		set := tags.FromStrings(e.Tags)
 		if len(filter.Tags) > 0 {
@@ -239,25 +229,25 @@ func (s *Store) ListProducts(ctx context.Context, filter prodcat.ListFilter) ([]
 	return result, nil
 }
 
-func (s *Store) DeleteProduct(ctx context.Context, productID string) error {
+func (c *Client) deleteProduct(ctx context.Context, productID string) error {
 	cfg := prodcatv1.ProductMatchConfig()
-	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "product_id", productID)
+	entity, err := c.getEntityByAnchor(ctx, cfg.EntityType, "product_id", productID)
 	if err != nil {
 		return err
 	}
-	return s.es.DeleteEntity(ctx, entity.ID)
+	return c.es.DeleteEntity(ctx, entity.ID)
 }
 
-// ─── Rulesets ───
+// ─── Rulesets (persistence) ───
 
-func (s *Store) CreateRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance, events ...any) error {
+func (c *Client) createRuleset(ctx context.Context, r Ruleset, prov Provenance, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 
 	opts := append([]store.WriteOpOption{store.WithTags(rulesetTags(r)...)}, eventOpts(events)...)
 	writeOp := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
 
-	_, err := s.es.BatchWrite(ctx, []store.BatchWriteOp{
+	_, err := c.es.BatchWrite(ctx, []store.BatchWriteOp{
 		{
 			WriteEntity: writeOp,
 			PreConditions: []store.PreCondition{
@@ -272,13 +262,13 @@ func (s *Store) CreateRuleset(ctx context.Context, r prodcat.Ruleset, prov prodc
 	return mapPreConditionError(err)
 }
 
-func (s *Store) PutRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.Provenance, events ...any) error {
+func (c *Client) putRuleset(ctx context.Context, r Ruleset, prov Provenance, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 	allTags := rulesetTags(r)
 
 	anchors := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate).Anchors
-	existing, err := s.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
+	existing, err := c.es.FindByAnchors(ctx, cfg.EntityType, anchors, nil)
 	if err != nil {
 		return fmt.Errorf("find entity: %w", err)
 	}
@@ -293,15 +283,15 @@ func (s *Store) PutRuleset(ctx context.Context, r prodcat.Ruleset, prov prodcat.
 		writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
 	}
 
-	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{
+	_, err = c.es.BatchWrite(ctx, []store.BatchWriteOp{
 		{WriteEntity: writeOp},
 	})
 	return err
 }
 
-func (s *Store) GetRuleset(ctx context.Context, id string) (*prodcat.Ruleset, error) {
+func (c *Client) getRuleset(ctx context.Context, id string) (*Ruleset, error) {
 	cfg := prodcatv1.RulesetMatchConfig()
-	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "ruleset_id", id)
+	entity, err := c.getEntityByAnchor(ctx, cfg.EntityType, "ruleset_id", id)
 	if err != nil {
 		return nil, err
 	}
@@ -313,13 +303,13 @@ func (s *Store) GetRuleset(ctx context.Context, id string) (*prodcat.Ruleset, er
 	return &r, nil
 }
 
-func (s *Store) ListRulesets(ctx context.Context) ([]prodcat.Ruleset, error) {
+func (c *Client) listRulesets(ctx context.Context) ([]Ruleset, error) {
 	cfg := prodcatv1.RulesetMatchConfig()
-	entities, err := s.es.GetEntitiesByType(ctx, cfg.EntityType, 1000, nil, nil)
+	entities, err := c.es.GetEntitiesByType(ctx, cfg.EntityType, 1000, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list rulesets: %w", err)
 	}
-	result := make([]prodcat.Ruleset, 0, len(entities))
+	result := make([]Ruleset, 0, len(entities))
 	for _, e := range entities {
 		var pb prodcatv1.Ruleset
 		if err := e.GetData(&pb); err != nil {
@@ -330,27 +320,27 @@ func (s *Store) ListRulesets(ctx context.Context) ([]prodcat.Ruleset, error) {
 	return result, nil
 }
 
-func (s *Store) DeleteRuleset(ctx context.Context, id string) error {
+func (c *Client) deleteRuleset(ctx context.Context, id string) error {
 	cfg := prodcatv1.RulesetMatchConfig()
-	entity, err := s.getEntityByAnchor(ctx, cfg.EntityType, "ruleset_id", id)
+	entity, err := c.getEntityByAnchor(ctx, cfg.EntityType, "ruleset_id", id)
 	if err != nil {
 		return err
 	}
-	return s.es.DeleteEntity(ctx, entity.ID)
+	return c.es.DeleteEntity(ctx, entity.ID)
 }
 
 // ─── Graph Relations ───
 
-func (s *Store) LinkRulesetToProduct(ctx context.Context, productID, rulesetID string) error {
-	productEntity, err := s.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
+func (c *Client) linkRulesetToProduct(ctx context.Context, productID, rulesetID string) error {
+	productEntity, err := c.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
 	if err != nil {
 		return fmt.Errorf("find product: %w", err)
 	}
-	rulesetEntity, err := s.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
+	rulesetEntity, err := c.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
 	if err != nil {
 		return fmt.Errorf("find ruleset: %w", err)
 	}
-	_, err = s.es.BatchWrite(ctx, []store.BatchWriteOp{{
+	_, err = c.es.BatchWrite(ctx, []store.BatchWriteOp{{
 		UpsertRelation: &store.UpsertRelationOp{
 			SourceID:     productEntity.ID,
 			TargetID:     rulesetEntity.ID,
@@ -361,35 +351,193 @@ func (s *Store) LinkRulesetToProduct(ctx context.Context, productID, rulesetID s
 	return err
 }
 
-func (s *Store) UnlinkRulesetFromProduct(ctx context.Context, productID, rulesetID string) error {
-	productEntity, err := s.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
+func (c *Client) unlinkRulesetFromProduct(ctx context.Context, productID, rulesetID string) error {
+	productEntity, err := c.getEntityByAnchor(ctx, prodcatv1.ProductMatchConfig().EntityType, "product_id", productID)
 	if err != nil {
 		return fmt.Errorf("find product: %w", err)
 	}
-	rulesetEntity, err := s.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
+	rulesetEntity, err := c.getEntityByAnchor(ctx, prodcatv1.RulesetMatchConfig().EntityType, "ruleset_id", rulesetID)
 	if err != nil {
 		return fmt.Errorf("find ruleset: %w", err)
 	}
-	return s.es.DeleteRelationByKey(ctx, productEntity.ID, rulesetEntity.ID, "has_ruleset")
+	return c.es.DeleteRelationByKey(ctx, productEntity.ID, rulesetEntity.ID, "has_ruleset")
+}
+
+// ─── Import (persistence) ───
+
+func (c *Client) importCatalogBatch(ctx context.Context, rulesets []Ruleset, products []Product, prov Provenance, onConflict OnConflict, importEvent *CatalogImportedEvent, actor string) error {
+	var ops []store.BatchWriteOp
+
+	rulesetCfg := prodcatv1.RulesetMatchConfig()
+	for _, r := range rulesets {
+		pb := rulesetToProto(r)
+		allTags := rulesetTags(r)
+
+		switch onConflict {
+		case OnConflictError:
+			event := &prodcatv1.RulesetCreated{
+				RulesetId: r.ID, Actor: actor, Name: r.Name,
+				Description: r.Description, Version: r.Version,
+			}
+			opts := []store.WriteOpOption{
+				store.WithTags(allTags...),
+				store.WithEvents(event),
+			}
+			writeOp := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
+			ops = append(ops, store.BatchWriteOp{
+				WriteEntity: writeOp,
+				PreConditions: []store.PreCondition{{
+					EntityType:   rulesetCfg.EntityType,
+					Anchors:      []matching.AnchorQuery{{Field: "ruleset_id", Value: r.ID}},
+					MustNotExist: true,
+				}},
+			})
+		default:
+			anchors := prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate).Anchors
+			existing, err := c.es.FindByAnchors(ctx, rulesetCfg.EntityType, anchors, nil)
+			if err != nil {
+				return fmt.Errorf("find ruleset %s: %w", r.ID, err)
+			}
+			opts := []store.WriteOpOption{store.WithTags(allTags...)}
+			var writeOp *store.WriteEntityOp
+			if len(existing) > 0 {
+				event := &prodcatv1.RulesetUpdated{
+					RulesetId: r.ID, Actor: actor, Name: r.Name,
+					Description: r.Description, Version: r.Version,
+				}
+				opts = append(opts, store.WithMatchedEntityID(existing[0].ID), store.WithEvents(event))
+				writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionUpdate, opts...)
+			} else {
+				event := &prodcatv1.RulesetCreated{
+					RulesetId: r.ID, Actor: actor, Name: r.Name,
+					Description: r.Description, Version: r.Version,
+				}
+				opts = append(opts, store.WithEvents(event))
+				writeOp = prodcatv1.RulesetWriteOp(pb, store.WriteActionCreate, opts...)
+			}
+			ops = append(ops, store.BatchWriteOp{WriteEntity: writeOp})
+		}
+	}
+
+	productCfg := prodcatv1.ProductMatchConfig()
+	for _, p := range products {
+		pb := productToProto(p)
+		allTags := productTags(p)
+
+		switch onConflict {
+		case OnConflictError:
+			event := &prodcatv1.ProductCreated{
+				ProductId: p.ProductID, Actor: actor, Name: p.Name,
+				Description: p.Description, Tags: p.Tags,
+				CurrencyCode: p.CurrencyCode, BaseRulesetIds: p.BaseRulesetIDs,
+			}
+			opts := []store.WriteOpOption{
+				store.WithTags(allTags...),
+				store.WithEvents(event),
+			}
+			writeOp := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate, opts...)
+			ops = append(ops, store.BatchWriteOp{
+				WriteEntity: writeOp,
+				PreConditions: []store.PreCondition{{
+					EntityType:   productCfg.EntityType,
+					Anchors:      []matching.AnchorQuery{{Field: "product_id", Value: p.ProductID}},
+					MustNotExist: true,
+				}},
+			})
+		default:
+			anchors := prodcatv1.ProductWriteOp(pb, store.WriteActionCreate).Anchors
+			existing, err := c.es.FindByAnchors(ctx, productCfg.EntityType, anchors, nil)
+			if err != nil {
+				return fmt.Errorf("find product %s: %w", p.ProductID, err)
+			}
+			opts := []store.WriteOpOption{store.WithTags(allTags...)}
+			var writeOp *store.WriteEntityOp
+			if len(existing) > 0 {
+				event := &prodcatv1.ProductUpdated{
+					ProductId: p.ProductID, Actor: actor, Name: p.Name,
+					Description: p.Description, Tags: p.Tags,
+					CurrencyCode: p.CurrencyCode, BaseRulesetIds: p.BaseRulesetIDs,
+				}
+				opts = append(opts, store.WithMatchedEntityID(existing[0].ID), store.WithEvents(event))
+				writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionUpdate, opts...)
+			} else {
+				event := &prodcatv1.ProductCreated{
+					ProductId: p.ProductID, Actor: actor, Name: p.Name,
+					Description: p.Description, Tags: p.Tags,
+					CurrencyCode: p.CurrencyCode, BaseRulesetIds: p.BaseRulesetIDs,
+				}
+				opts = append(opts, store.WithEvents(event))
+				writeOp = prodcatv1.ProductWriteOp(pb, store.WriteActionCreate, opts...)
+			}
+			ops = append(ops, store.BatchWriteOp{WriteEntity: writeOp})
+		}
+	}
+
+	if len(ops) == 0 {
+		return nil
+	}
+
+	// Emit the catalog-level import event on the first op.
+	if importEvent != nil {
+		importProto := eventsToProto([]any{importEvent})
+		if len(importProto) > 0 {
+			ops[0].WriteEntity.Events = append(ops[0].WriteEntity.Events, importProto...)
+		}
+	}
+
+	results, err := c.es.BatchWrite(ctx, ops)
+	if err != nil {
+		return mapPreConditionError(err)
+	}
+
+	// Create graph relations for product→ruleset links.
+	rulesetOffset := len(rulesets)
+	for i, p := range products {
+		if len(p.BaseRulesetIDs) == 0 {
+			continue
+		}
+		productEntityID := results[rulesetOffset+i].Entity.ID
+		for _, rsID := range p.BaseRulesetIDs {
+			for j, r := range rulesets {
+				if r.ID == rsID {
+					rulesetEntityID := results[j].Entity.ID
+					_, linkErr := c.es.BatchWrite(ctx, []store.BatchWriteOp{{
+						UpsertRelation: &store.UpsertRelationOp{
+							SourceID:     productEntityID,
+							TargetID:     rulesetEntityID,
+							RelationType: "has_ruleset",
+							Confidence:   1.0,
+						},
+					}})
+					if linkErr != nil {
+						return fmt.Errorf("link product %s to ruleset %s: %w", p.ProductID, rsID, linkErr)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // ─── Generic helpers ───
 
-func (s *Store) getEntityByAnchor(ctx context.Context, entityType, field, value string) (matching.StoredEntity, error) {
+func (c *Client) getEntityByAnchor(ctx context.Context, entityType, field, value string) (matching.StoredEntity, error) {
 	cfg, _ := matchRegistry.Get(entityType)
 	if cfg.Normalizers != nil {
 		if fn, ok := cfg.Normalizers[field]; ok && fn != nil {
 			value = fn(value)
 		}
 	}
-	entities, err := s.es.FindByAnchors(ctx, entityType, []matching.AnchorQuery{
+	entities, err := c.es.FindByAnchors(ctx, entityType, []matching.AnchorQuery{
 		{Field: field, Value: value},
 	}, nil)
 	if err != nil {
 		return matching.StoredEntity{}, fmt.Errorf("find %s: %w", entityType, err)
 	}
 	if len(entities) == 0 {
-		return matching.StoredEntity{}, fmt.Errorf("%s %q: %w", field, value, prodcat.ErrNotFound)
+		return matching.StoredEntity{}, fmt.Errorf("%s %q: %w", field, value, ErrNotFound)
 	}
 	return entities[0], nil
 }
@@ -420,11 +568,11 @@ func mapPreConditionError(err error) error {
 	if errors.As(err, &pcErr) {
 		switch pcErr.Violation {
 		case "not_found":
-			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, prodcat.ErrNotFound)
+			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, ErrNotFound)
 		case "already_exists":
-			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, prodcat.ErrAlreadyExists)
+			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, ErrAlreadyExists)
 		case "tag_forbidden":
-			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, prodcat.ErrRulesetDisabled)
+			return fmt.Errorf("%s: %w", pcErr.Condition.EntityType, ErrRulesetDisabled)
 		default:
 			return fmt.Errorf("precondition failed: %w", err)
 		}
@@ -434,7 +582,7 @@ func mapPreConditionError(err error) error {
 
 // ─── Domain <-> Proto conversions ───
 
-func productToProto(p prodcat.Product) *prodcatv1.Product {
+func productToProto(p Product) *prodcatv1.Product {
 	meta := make(map[string]string)
 	if p.CurrencyCode != "" {
 		meta["currency_code"] = p.CurrencyCode
@@ -464,18 +612,18 @@ func productToProto(p prodcat.Product) *prodcatv1.Product {
 	}
 }
 
-func productFromProto(pb *prodcatv1.Product, storedTags []string) prodcat.Product {
+func productFromProto(pb *prodcatv1.Product, storedTags []string) Product {
 	set := tags.FromStrings(storedTags)
 	userSet := set.Without(tags.PrefixStatus, "status_reason", tags.PrefixEntity)
 	statusVal, _ := set.Get(tags.PrefixStatus)
 	disabled := statusVal == "disabled"
-	var disabledReason prodcat.DisabledReason
+	var disabledReason DisabledReason
 	if disabled {
 		if reason, ok := set.Get("status_reason"); ok {
-			disabledReason = prodcat.DisabledReason(reason)
+			disabledReason = DisabledReason(reason)
 		}
 	}
-	p := prodcat.Product{
+	p := Product{
 		ProductID:       pb.ProductId,
 		Name:            pb.Name,
 		Description:     pb.Description,
@@ -488,7 +636,7 @@ func productFromProto(pb *prodcatv1.Product, storedTags []string) prodcat.Produc
 	if pb.Meta != nil {
 		p.CurrencyCode = pb.Meta["currency_code"]
 		if mode, ok := pb.Meta["availability_mode"]; ok {
-			p.Availability.Mode = prodcat.AvailabilityMode(mode)
+			p.Availability.Mode = AvailabilityMode(mode)
 		}
 		if codes, ok := pb.Meta["country_codes"]; ok && codes != "" {
 			p.Availability.CountryCodes = strings.Split(codes, ",")
@@ -500,26 +648,28 @@ func productFromProto(pb *prodcatv1.Product, storedTags []string) prodcat.Produc
 	return p
 }
 
-func rulesetToProto(r prodcat.Ruleset) *prodcatv1.Ruleset {
+func rulesetToProto(r Ruleset) *prodcatv1.Ruleset {
 	return &prodcatv1.Ruleset{
 		RulesetId:      r.ID,
 		Name:           r.Name,
 		Description:    r.Description,
 		Version:        r.Version,
 		Content:        string(r.Content),
+		ContentHash:    r.ContentHash,
 		Disabled:       r.Disabled,
 		DisabledReason: string(r.DisabledReason),
 	}
 }
 
-func rulesetFromProto(pb *prodcatv1.Ruleset) prodcat.Ruleset {
-	return prodcat.Ruleset{
+func rulesetFromProto(pb *prodcatv1.Ruleset) Ruleset {
+	return Ruleset{
 		ID:             pb.RulesetId,
 		Name:           pb.Name,
 		Description:    pb.Description,
 		Version:        pb.Version,
 		Content:        []byte(pb.Content),
+		ContentHash:    pb.ContentHash,
 		Disabled:       pb.Disabled,
-		DisabledReason: prodcat.DisabledReason(pb.DisabledReason),
+		DisabledReason: DisabledReason(pb.DisabledReason),
 	}
 }

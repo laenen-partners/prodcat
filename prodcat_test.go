@@ -11,14 +11,13 @@ import (
 
 	"github.com/laenen-partners/entitystore"
 	"github.com/laenen-partners/prodcat"
-	esstore "github.com/laenen-partners/prodcat/entitystore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var _sharedConnStr string
 
-func sharedTestClient(t *testing.T) (*prodcat.Client, prodcat.ImportTracker) {
+func sharedTestClient(t *testing.T) *prodcat.Client {
 	t.Helper()
 	ctx := context.Background()
 
@@ -63,11 +62,9 @@ func sharedTestClient(t *testing.T) (*prodcat.Client, prodcat.ImportTracker) {
 	}
 	t.Cleanup(es.Close)
 
-	store := esstore.NewStore(es)
-	client := prodcat.NewClient(store)
-	tracker := esstore.NewImportTracker(es)
+	client := prodcat.NewClient(es)
 
-	return client, tracker
+	return client
 }
 
 // validRulesetContent returns minimal valid ruleset YAML for tests.
@@ -78,7 +75,7 @@ func validRulesetContent() []byte {
 // ─── Product CRUD ───
 
 func TestProductRegistrationAndLookup(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:product-crud"}
 
@@ -101,7 +98,7 @@ func TestProductRegistrationAndLookup(t *testing.T) {
 // ─── Product Validation ───
 
 func TestRegisterProduct_Validation(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:validation"}
 
@@ -123,7 +120,7 @@ func TestRegisterProduct_Validation(t *testing.T) {
 }
 
 func TestRegisterProduct_DuplicateReturnsAlreadyExists(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:duplicate"}
 
@@ -142,7 +139,7 @@ func TestRegisterProduct_DuplicateReturnsAlreadyExists(t *testing.T) {
 // ─── Ruleset Validation ───
 
 func TestCreateRuleset_Validation(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:validation"}
 
@@ -164,7 +161,7 @@ func TestCreateRuleset_Validation(t *testing.T) {
 }
 
 func TestCreateRuleset_DuplicateReturnsAlreadyExists(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:dup-ruleset"}
 
@@ -183,7 +180,7 @@ func TestCreateRuleset_DuplicateReturnsAlreadyExists(t *testing.T) {
 // ─── Not Found ───
 
 func TestGetProduct_NotFoundReturnsErrNotFound(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 
 	_, err := client.GetProduct(ctx, "nonexistent-product")
@@ -192,7 +189,7 @@ func TestGetProduct_NotFoundReturnsErrNotFound(t *testing.T) {
 }
 
 func TestGetRuleset_NotFoundReturnsErrNotFound(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 
 	_, err := client.GetRuleset(ctx, "nonexistent-ruleset")
@@ -203,7 +200,7 @@ func TestGetRuleset_NotFoundReturnsErrNotFound(t *testing.T) {
 // ─── Disable / Enable Ruleset ───
 
 func TestDisableEnableRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:disable"}
 
@@ -233,7 +230,7 @@ func TestDisableEnableRuleset(t *testing.T) {
 // ─── AddRuleset: Referential Integrity ───
 
 func TestAddRuleset_RejectsNonexistentRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:add-nonexistent"}
 
@@ -248,7 +245,7 @@ func TestAddRuleset_RejectsNonexistentRuleset(t *testing.T) {
 }
 
 func TestAddRuleset_RejectsDisabledRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:add-disabled"}
 
@@ -273,7 +270,7 @@ func TestAddRuleset_RejectsDisabledRuleset(t *testing.T) {
 // ─── RegisterProduct: Rejects Nonexistent Rulesets ───
 
 func TestRegisterProduct_RejectsNonexistentRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:reg-ghost-rs"}
 
@@ -286,7 +283,7 @@ func TestRegisterProduct_RejectsNonexistentRuleset(t *testing.T) {
 }
 
 func TestRegisterProduct_RejectsDisabledRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:reg-disabled-rs"}
 
@@ -309,7 +306,7 @@ func TestRegisterProduct_RejectsDisabledRuleset(t *testing.T) {
 // ─── ResolveRuleset: Skips Disabled ───
 
 func TestResolveRuleset_SkipsDisabledBaseRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:resolve-skip"}
 
@@ -345,12 +342,12 @@ func TestResolveRuleset_SkipsDisabledBaseRuleset(t *testing.T) {
 // ─── Ruleset Resolution ───
 
 func TestResolveRuleset(t *testing.T) {
-	client, tracker := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 
-	data, err := os.ReadFile("catalog/2026031801_platform_subscription.yaml")
+	data, err := os.ReadFile("examples/2026031801_platform_subscription.yaml")
 	require.NoError(t, err)
-	err = client.Import(ctx, "catalog/2026031801_platform_subscription.yaml", data, tracker)
+	err = client.Import(ctx, "examples/2026031801_platform_subscription.yaml", data)
 	require.NoError(t, err)
 
 	resolved, err := client.ResolveRuleset(ctx, "platform-subscription")
@@ -366,7 +363,7 @@ func TestResolveRuleset(t *testing.T) {
 // ─── Add / Remove Ruleset ───
 
 func TestAddRemoveRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:ruleset-mgmt"}
 
@@ -393,23 +390,47 @@ func TestAddRemoveRuleset(t *testing.T) {
 	assert.Empty(t, p.BaseRulesetIDs)
 }
 
-// ─── Import Tracker ───
+// ─── Import OnConflict ───
 
-func TestImportTracker_Idempotent(t *testing.T) {
-	client, tracker := sharedTestClient(t)
+func TestImport_OnConflictUpdate(t *testing.T) {
+	client := sharedTestClient(t)
 	ctx := context.Background()
 
-	data, err := os.ReadFile("catalog/2026031801_platform_subscription.yaml")
+	data, err := os.ReadFile("examples/2026031801_platform_subscription.yaml")
 	require.NoError(t, err)
 
-	err = client.Import(ctx, "catalog/2026031801_platform_subscription.yaml", data, tracker)
+	// Default: upsert — importing twice should succeed.
+	err = client.Import(ctx, "import-upsert-test.yaml", data)
 	require.NoError(t, err)
-	err = client.Import(ctx, "catalog/2026031801_platform_subscription.yaml", data, tracker)
+	err = client.Import(ctx, "import-upsert-test.yaml", data)
+	require.NoError(t, err)
+}
+
+func TestImport_OnConflictError(t *testing.T) {
+	client := sharedTestClient(t)
+	ctx := context.Background()
+
+	data := []byte(`kind: catalog
+rulesets:
+  - id: conflict-test-rs
+    name: Conflict Test RS
+    evaluations:
+      - name: check
+        expression: "true"
+        writes: result
+products:
+  - product_id: conflict-test-prod
+    name: Conflict Test Product
+`)
+
+	// First import with OnConflictError should succeed.
+	err := client.Import(ctx, "import-error-test.yaml", data, prodcat.WithOnConflict(prodcat.OnConflictError))
 	require.NoError(t, err)
 
-	imported, err := tracker.HasImported(ctx, "catalog/2026031801_platform_subscription.yaml")
-	require.NoError(t, err)
-	assert.True(t, imported)
+	// Second import with OnConflictError should fail with ErrAlreadyExists.
+	err = client.Import(ctx, "import-error-test.yaml", data, prodcat.WithOnConflict(prodcat.OnConflictError))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, prodcat.ErrAlreadyExists))
 }
 
 // ─── Validation ───
@@ -510,7 +531,7 @@ func TestValidateRulesetContent(t *testing.T) {
 // ─── Soft Delete ───
 
 func TestDeleteProduct(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:delete-product"}
 
@@ -528,7 +549,7 @@ func TestDeleteProduct(t *testing.T) {
 }
 
 func TestDeleteRuleset(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:delete-ruleset"}
 
@@ -548,7 +569,7 @@ func TestDeleteRuleset(t *testing.T) {
 // ─── Graph Relations ───
 
 func TestAddRuleset_CreatesGraphRelation(t *testing.T) {
-	client, _ := sharedTestClient(t)
+	client := sharedTestClient(t)
 	ctx := context.Background()
 	prov := prodcat.Provenance{SourceURN: "test:graph-link"}
 

@@ -33,4 +33,6 @@ message Ruleset {
   string content = 5;
   bool disabled = 6;
   string disabled_reason = 7;
+  // SHA-256 hash of content, computed on write.
+  string content_hash = 8;
 }

@@ -77,6 +77,11 @@ func RulesetExtractionSchema() extraction.ExtractionSchema {
 				Description: "disabled reason",
 				Type:        extraction.ExtractionFieldTypeString,
 			},
+			{
+				Name:        "content_hash",
+				Description: "SHA-256 hash of content, computed on write",
+				Type:        extraction.ExtractionFieldTypeString,
+			},
 		},
 	}
 }

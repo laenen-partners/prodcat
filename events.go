@@ -65,6 +65,14 @@ type RulesetCreatedEvent struct {
 	Version     string
 }
 
+type RulesetUpdatedEvent struct {
+	RulesetID   string
+	Actor       string
+	Name        string
+	Description string
+	Version     string
+}
+
 type RulesetDisabledEvent struct {
 	RulesetID string
 	Actor     string

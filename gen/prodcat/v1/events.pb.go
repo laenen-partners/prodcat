@@ -469,6 +469,82 @@ func (x *RulesetCreated) GetVersion() string {
 	return ""
 }
 
+type RulesetUpdated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RulesetId     string                 `protobuf:"bytes,1,opt,name=ruleset_id,json=rulesetId,proto3" json:"ruleset_id,omitempty"`
+	Actor         string                 `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Version       string                 `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RulesetUpdated) Reset() {
+	*x = RulesetUpdated{}
+	mi := &file_prodcat_v1_events_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RulesetUpdated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RulesetUpdated) ProtoMessage() {}
+
+func (x *RulesetUpdated) ProtoReflect() protoreflect.Message {
+	mi := &file_prodcat_v1_events_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RulesetUpdated.ProtoReflect.Descriptor instead.
+func (*RulesetUpdated) Descriptor() ([]byte, []int) {
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RulesetUpdated) GetRulesetId() string {
+	if x != nil {
+		return x.RulesetId
+	}
+	return ""
+}
+
+func (x *RulesetUpdated) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
+}
+
+func (x *RulesetUpdated) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RulesetUpdated) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *RulesetUpdated) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 type RulesetDisabled struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RulesetId     string                 `protobuf:"bytes,1,opt,name=ruleset_id,json=rulesetId,proto3" json:"ruleset_id,omitempty"`
@@ -481,7 +557,7 @@ type RulesetDisabled struct {
 
 func (x *RulesetDisabled) Reset() {
 	*x = RulesetDisabled{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[6]
+	mi := &file_prodcat_v1_events_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +569,7 @@ func (x *RulesetDisabled) String() string {
 func (*RulesetDisabled) ProtoMessage() {}
 
 func (x *RulesetDisabled) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[6]
+	mi := &file_prodcat_v1_events_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +582,7 @@ func (x *RulesetDisabled) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetDisabled.ProtoReflect.Descriptor instead.
 func (*RulesetDisabled) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{6}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RulesetDisabled) GetRulesetId() string {
@@ -548,7 +624,7 @@ type RulesetEnabled struct {
 
 func (x *RulesetEnabled) Reset() {
 	*x = RulesetEnabled{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[7]
+	mi := &file_prodcat_v1_events_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +636,7 @@ func (x *RulesetEnabled) String() string {
 func (*RulesetEnabled) ProtoMessage() {}
 
 func (x *RulesetEnabled) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[7]
+	mi := &file_prodcat_v1_events_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +649,7 @@ func (x *RulesetEnabled) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetEnabled.ProtoReflect.Descriptor instead.
 func (*RulesetEnabled) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{7}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RulesetEnabled) GetRulesetId() string {
@@ -608,7 +684,7 @@ type RulesetDeleted struct {
 
 func (x *RulesetDeleted) Reset() {
 	*x = RulesetDeleted{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[8]
+	mi := &file_prodcat_v1_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +696,7 @@ func (x *RulesetDeleted) String() string {
 func (*RulesetDeleted) ProtoMessage() {}
 
 func (x *RulesetDeleted) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[8]
+	mi := &file_prodcat_v1_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +709,7 @@ func (x *RulesetDeleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetDeleted.ProtoReflect.Descriptor instead.
 func (*RulesetDeleted) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{8}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RulesetDeleted) GetRulesetId() string {
@@ -670,7 +746,7 @@ type RulesetLinkedToProduct struct {
 
 func (x *RulesetLinkedToProduct) Reset() {
 	*x = RulesetLinkedToProduct{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[9]
+	mi := &file_prodcat_v1_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +758,7 @@ func (x *RulesetLinkedToProduct) String() string {
 func (*RulesetLinkedToProduct) ProtoMessage() {}
 
 func (x *RulesetLinkedToProduct) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[9]
+	mi := &file_prodcat_v1_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,7 +771,7 @@ func (x *RulesetLinkedToProduct) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetLinkedToProduct.ProtoReflect.Descriptor instead.
 func (*RulesetLinkedToProduct) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{9}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RulesetLinkedToProduct) GetProductId() string {
@@ -746,7 +822,7 @@ type RulesetUnlinkedFromProduct struct {
 
 func (x *RulesetUnlinkedFromProduct) Reset() {
 	*x = RulesetUnlinkedFromProduct{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[10]
+	mi := &file_prodcat_v1_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -758,7 +834,7 @@ func (x *RulesetUnlinkedFromProduct) String() string {
 func (*RulesetUnlinkedFromProduct) ProtoMessage() {}
 
 func (x *RulesetUnlinkedFromProduct) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[10]
+	mi := &file_prodcat_v1_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -771,7 +847,7 @@ func (x *RulesetUnlinkedFromProduct) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RulesetUnlinkedFromProduct.ProtoReflect.Descriptor instead.
 func (*RulesetUnlinkedFromProduct) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{10}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RulesetUnlinkedFromProduct) GetProductId() string {
@@ -824,7 +900,7 @@ type CatalogImported struct {
 
 func (x *CatalogImported) Reset() {
 	*x = CatalogImported{}
-	mi := &file_prodcat_v1_events_proto_msgTypes[11]
+	mi := &file_prodcat_v1_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -836,7 +912,7 @@ func (x *CatalogImported) String() string {
 func (*CatalogImported) ProtoMessage() {}
 
 func (x *CatalogImported) ProtoReflect() protoreflect.Message {
-	mi := &file_prodcat_v1_events_proto_msgTypes[11]
+	mi := &file_prodcat_v1_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -849,7 +925,7 @@ func (x *CatalogImported) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogImported.ProtoReflect.Descriptor instead.
 func (*CatalogImported) Descriptor() ([]byte, []int) {
-	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{11}
+	return file_prodcat_v1_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CatalogImported) GetFilename() string {
@@ -947,6 +1023,13 @@ const file_prodcat_v1_events_proto_rawDesc = "" +
 	"\x05actor\x18\x02 \x01(\tR\x05actor\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\tR\aversion\"\x95\x01\n" +
+	"\x0eRulesetUpdated\x12\x1d\n" +
+	"\n" +
+	"ruleset_id\x18\x01 \x01(\tR\trulesetId\x12\x14\n" +
+	"\x05actor\x18\x02 \x01(\tR\x05actor\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\tR\aversion\"r\n" +
 	"\x0fRulesetDisabled\x12\x1d\n" +
 	"\n" +
@@ -1003,7 +1086,7 @@ func file_prodcat_v1_events_proto_rawDescGZIP() []byte {
 	return file_prodcat_v1_events_proto_rawDescData
 }
 
-var file_prodcat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_prodcat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_prodcat_v1_events_proto_goTypes = []any{
 	(*ProductCreated)(nil),             // 0: prodcat.v1.ProductCreated
 	(*ProductUpdated)(nil),             // 1: prodcat.v1.ProductUpdated
@@ -1011,12 +1094,13 @@ var file_prodcat_v1_events_proto_goTypes = []any{
 	(*ProductEnabled)(nil),             // 3: prodcat.v1.ProductEnabled
 	(*ProductDeleted)(nil),             // 4: prodcat.v1.ProductDeleted
 	(*RulesetCreated)(nil),             // 5: prodcat.v1.RulesetCreated
-	(*RulesetDisabled)(nil),            // 6: prodcat.v1.RulesetDisabled
-	(*RulesetEnabled)(nil),             // 7: prodcat.v1.RulesetEnabled
-	(*RulesetDeleted)(nil),             // 8: prodcat.v1.RulesetDeleted
-	(*RulesetLinkedToProduct)(nil),     // 9: prodcat.v1.RulesetLinkedToProduct
-	(*RulesetUnlinkedFromProduct)(nil), // 10: prodcat.v1.RulesetUnlinkedFromProduct
-	(*CatalogImported)(nil),            // 11: prodcat.v1.CatalogImported
+	(*RulesetUpdated)(nil),             // 6: prodcat.v1.RulesetUpdated
+	(*RulesetDisabled)(nil),            // 7: prodcat.v1.RulesetDisabled
+	(*RulesetEnabled)(nil),             // 8: prodcat.v1.RulesetEnabled
+	(*RulesetDeleted)(nil),             // 9: prodcat.v1.RulesetDeleted
+	(*RulesetLinkedToProduct)(nil),     // 10: prodcat.v1.RulesetLinkedToProduct
+	(*RulesetUnlinkedFromProduct)(nil), // 11: prodcat.v1.RulesetUnlinkedFromProduct
+	(*CatalogImported)(nil),            // 12: prodcat.v1.CatalogImported
 }
 var file_prodcat_v1_events_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -1037,7 +1121,7 @@ func file_prodcat_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_prodcat_v1_events_proto_rawDesc), len(file_prodcat_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
