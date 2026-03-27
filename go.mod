@@ -4,12 +4,12 @@ go 1.26.1
 
 require (
 	connectrpc.com/connect v1.19.1
-	github.com/a-h/templ v0.3.977
+	github.com/a-h/templ v0.3.1001
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/laenen-partners/dsx v0.7.0
-	github.com/laenen-partners/entitystore v0.23.0
+	github.com/laenen-partners/dsx v0.9.1
+	github.com/laenen-partners/entitystore v0.26.0
 	github.com/laenen-partners/evalengine v0.5.0
 	github.com/laenen-partners/identity v0.1.0
 	github.com/laenen-partners/pubsub v0.3.1
@@ -52,7 +52,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
-	github.com/laenen-partners/migrate v0.1.0 // indirect
+	github.com/laenen-partners/migrate v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
