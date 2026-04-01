@@ -83,9 +83,16 @@ type Product struct {
 	RulesetIds      []string               `protobuf:"bytes,8,rep,name=ruleset_ids,json=rulesetIds,proto3" json:"ruleset_ids,omitempty"`
 	// Used for additional information like
 	// Only-available-contries
-	Meta          map[string]string `protobuf:"bytes,9,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Meta map[string]string `protobuf:"bytes,9,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Routing: capability name → provider ID.
+	// Keys: "banking", "cards", "screening", "payments", "notifications"
+	// Values: provider IDs registered in the adaptor registry.
+	Routing map[string]string `protobuf:"bytes,10,rep,name=routing,proto3" json:"routing,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Whether multiple subscriptions to this product are allowed per customer.
+	// Default (false) means singleton — one subscription per customer.
+	MultiSubscription bool `protobuf:"varint,11,opt,name=multi_subscription,json=multiSubscription,proto3" json:"multi_subscription,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Product) Reset() {
@@ -181,12 +188,26 @@ func (x *Product) GetMeta() map[string]string {
 	return nil
 }
 
+func (x *Product) GetRouting() map[string]string {
+	if x != nil {
+		return x.Routing
+	}
+	return nil
+}
+
+func (x *Product) GetMultiSubscription() bool {
+	if x != nil {
+		return x.MultiSubscription
+	}
+	return false
+}
+
 var File_prodcat_v1_product_proto protoreflect.FileDescriptor
 
 const file_prodcat_v1_product_proto_rawDesc = "" +
 	"\n" +
 	"\x18prodcat/v1/product.proto\x12\n" +
-	"prodcat.v1\x1a\x1centitystore/v1/options.proto\"\xde\x03\n" +
+	"prodcat.v1\x1a\x1centitystore/v1/options.proto\"\x85\x05\n" +
 	"\aProduct\x12.\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tB\x0f\x82\xb5\x18\v\b\x01\x10\x01\x1d\x00\x00\x80?(\x01R\tproductId\x12\x1c\n" +
@@ -198,8 +219,14 @@ const file_prodcat_v1_product_proto_rawDesc = "" +
 	"\x11parent_product_id\x18\a \x01(\tR\x0fparentProductId\x12\x1f\n" +
 	"\vruleset_ids\x18\b \x03(\tR\n" +
 	"rulesetIds\x121\n" +
-	"\x04meta\x18\t \x03(\v2\x1d.prodcat.v1.Product.MetaEntryR\x04meta\x1a7\n" +
+	"\x04meta\x18\t \x03(\v2\x1d.prodcat.v1.Product.MetaEntryR\x04meta\x12:\n" +
+	"\arouting\x18\n" +
+	" \x03(\v2 .prodcat.v1.Product.RoutingEntryR\arouting\x12-\n" +
+	"\x12multi_subscription\x18\v \x01(\bR\x11multiSubscription\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a:\n" +
+	"\fRoutingEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:1\x82\xb5\x18-\n" +
 	"\n" +
@@ -221,20 +248,22 @@ func file_prodcat_v1_product_proto_rawDescGZIP() []byte {
 }
 
 var file_prodcat_v1_product_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_prodcat_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_prodcat_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_prodcat_v1_product_proto_goTypes = []any{
 	(DisabledReason)(0), // 0: prodcat.v1.DisabledReason
 	(*Product)(nil),     // 1: prodcat.v1.Product
 	nil,                 // 2: prodcat.v1.Product.MetaEntry
+	nil,                 // 3: prodcat.v1.Product.RoutingEntry
 }
 var file_prodcat_v1_product_proto_depIdxs = []int32{
 	0, // 0: prodcat.v1.Product.disabled_reason:type_name -> prodcat.v1.DisabledReason
 	2, // 1: prodcat.v1.Product.meta:type_name -> prodcat.v1.Product.MetaEntry
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 2: prodcat.v1.Product.routing:type_name -> prodcat.v1.Product.RoutingEntry
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_prodcat_v1_product_proto_init() }
@@ -248,7 +277,7 @@ func file_prodcat_v1_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_prodcat_v1_product_proto_rawDesc), len(file_prodcat_v1_product_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

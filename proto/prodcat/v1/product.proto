@@ -47,4 +47,13 @@ message Product {
   // Used for additional information like
   // Only-available-contries
   map<string, string> meta = 9;
+
+  // Routing: capability name → provider ID.
+  // Keys: "banking", "cards", "screening", "payments", "notifications"
+  // Values: provider IDs registered in the adaptor registry.
+  map<string, string> routing = 10;
+
+  // Whether multiple subscriptions to this product are allowed per customer.
+  // Default (false) means singleton — one subscription per customer.
+  bool multi_subscription = 11;
 }

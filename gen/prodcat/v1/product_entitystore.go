@@ -90,6 +90,16 @@ func ProductExtractionSchema() extraction.ExtractionSchema {
 				Description: "Used for additional information like Only-available-contries",
 				Type:        extraction.ExtractionFieldTypeString,
 			},
+			{
+				Name:        "routing",
+				Description: "Routing: capability name → provider ID. Keys: \"banking\", \"cards\", \"screening\", \"payments\", \"notifications\" Values: provider IDs registered in the adaptor registry",
+				Type:        extraction.ExtractionFieldTypeString,
+			},
+			{
+				Name:        "multi_subscription",
+				Description: "Whether multiple subscriptions to this product are allowed per customer. Default (false) means singleton — one subscription per customer",
+				Type:        extraction.ExtractionFieldTypeBoolean,
+			},
 		},
 	}
 }

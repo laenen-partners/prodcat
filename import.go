@@ -50,13 +50,15 @@ type CatalogRuleset struct {
 
 // CatalogProduct is a product definition in a catalogue file.
 type CatalogProduct struct {
-	ProductID      string     `yaml:"product_id"`
-	Name           string     `yaml:"name"`
-	Description    string     `yaml:"description"`
-	Tags           []string   `yaml:"tags"`
-	CurrencyCode   string     `yaml:"currency_code,omitempty"`
-	Availability   CatalogGeo `yaml:"availability"`
-	BaseRulesetIDs []string   `yaml:"base_ruleset_ids"`
+	ProductID         string            `yaml:"product_id"`
+	Name              string            `yaml:"name"`
+	Description       string            `yaml:"description"`
+	Tags              []string          `yaml:"tags"`
+	CurrencyCode      string            `yaml:"currency_code,omitempty"`
+	Availability      CatalogGeo        `yaml:"availability"`
+	BaseRulesetIDs    []string          `yaml:"base_ruleset_ids"`
+	Routing           map[string]string `yaml:"routing,omitempty"`
+	MultiSubscription bool              `yaml:"multi_subscription,omitempty"`
 }
 
 // CatalogEvaluation is a single evaluation rule in a catalogue ruleset.
@@ -72,9 +74,6 @@ type CatalogGeo struct {
 // All rulesets and products are written in a single transaction.
 // By default (OnConflictUpdate), rulesets and products are upserted.
 // Use WithOnConflict(OnConflictError) to fail on duplicates instead.
-//
-// Provenance is set to "import:<filename>" so all changes are traceable to
-// the specific catalogue file that created them.
 func (c *Client) Import(ctx context.Context, filename string, data []byte, opts ...ImportOption) error {
 	cfg := importConfig{onConflict: OnConflictUpdate}
 	for _, o := range opts {
@@ -90,7 +89,6 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, opts 
 		return fmt.Errorf("validate %s: %w", filename, err)
 	}
 
-	prov := Provenance{SourceURN: "import:" + filename}
 	fileHash := fmt.Sprintf("%x", sha256.Sum256(data))
 	now := time.Now().UTC()
 
@@ -124,9 +122,11 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, opts 
 				Mode:         AvailabilityMode(p.Availability.Mode),
 				CountryCodes: p.Availability.CountryCodes,
 			},
-			BaseRulesetIDs: p.BaseRulesetIDs,
-			CreatedAt:      now,
-			UpdatedAt:      now,
+			BaseRulesetIDs:    p.BaseRulesetIDs,
+			Routing:           p.Routing,
+			MultiSubscription: p.MultiSubscription,
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		})
 	}
 
@@ -150,7 +150,7 @@ func (c *Client) Import(ctx context.Context, filename string, data []byte, opts 
 		ProductIDs:   productIDs,
 	}
 
-	if err := c.importCatalogBatch(ctx, rulesets, products, prov, cfg.onConflict, importEvent, actor); err != nil {
+	if err := c.importCatalogBatch(ctx, rulesets, products, cfg.onConflict, importEvent, actor); err != nil {
 		return err
 	}
 

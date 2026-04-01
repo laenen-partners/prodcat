@@ -39,19 +39,21 @@ const (
 // Status is managed via the tags lifecycle (Disabled/DisabledReason),
 // not a separate status field.
 type Product struct {
-	ProductID       string          `json:"product_id"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	Tags            []string        `json:"tags"`
-	Disabled        bool            `json:"disabled"`
-	DisabledReason  DisabledReason  `json:"disabled_reason,omitempty"`
-	CurrencyCode    string          `json:"currency_code,omitempty"`
-	ParentProductID string          `json:"parent_product_id,omitempty"`
-	Availability    GeoAvailability `json:"availability"`
-	BaseRulesetIDs  []string        `json:"base_ruleset_ids,omitempty"`
-	Ruleset         []byte          `json:"ruleset,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ProductID         string            `json:"product_id"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	Tags              []string          `json:"tags"`
+	Disabled          bool              `json:"disabled"`
+	DisabledReason    DisabledReason    `json:"disabled_reason,omitempty"`
+	CurrencyCode      string            `json:"currency_code,omitempty"`
+	ParentProductID   string            `json:"parent_product_id,omitempty"`
+	Availability      GeoAvailability   `json:"availability"`
+	BaseRulesetIDs    []string          `json:"base_ruleset_ids,omitempty"`
+	Ruleset           []byte            `json:"ruleset,omitempty"`
+	Routing           map[string]string `json:"routing,omitempty"`
+	MultiSubscription bool              `json:"multi_subscription"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
 }
 
 // GeoAvailability defines geographic availability.
@@ -80,14 +82,6 @@ type Ruleset struct {
 type ListFilter struct {
 	Tags        []string
 	CountryCode string
-}
-
-// ─── Provenance ───
-
-// Provenance tracks who/what made a change and why.
-type Provenance struct {
-	SourceURN string // who/what made the change (e.g. "user:admin-123", "import:20260318", "api:onboarding")
-	Reason    string // optional human-readable reason
 }
 
 // ─── Ruleset Resolution ───

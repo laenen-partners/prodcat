@@ -141,7 +141,7 @@ func eventOpts(events []any) []store.WriteOpOption {
 
 // ─── Products (persistence) ───
 
-func (c *Client) createProduct(ctx context.Context, p Product, prov Provenance, events ...any) error {
+func (c *Client) createProduct(ctx context.Context, p Product, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 
@@ -163,7 +163,7 @@ func (c *Client) createProduct(ctx context.Context, p Product, prov Provenance, 
 	return mapPreConditionError(err)
 }
 
-func (c *Client) putProduct(ctx context.Context, p Product, prov Provenance, events ...any) error {
+func (c *Client) putProduct(ctx context.Context, p Product, events ...any) error {
 	pb := productToProto(p)
 	cfg := prodcatv1.ProductMatchConfig()
 	rulesetPCs := rulesetPreConditions(p.BaseRulesetIDs)
@@ -240,7 +240,7 @@ func (c *Client) deleteProduct(ctx context.Context, productID string) error {
 
 // ─── Rulesets (persistence) ───
 
-func (c *Client) createRuleset(ctx context.Context, r Ruleset, prov Provenance, events ...any) error {
+func (c *Client) createRuleset(ctx context.Context, r Ruleset, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 
@@ -262,7 +262,7 @@ func (c *Client) createRuleset(ctx context.Context, r Ruleset, prov Provenance, 
 	return mapPreConditionError(err)
 }
 
-func (c *Client) putRuleset(ctx context.Context, r Ruleset, prov Provenance, events ...any) error {
+func (c *Client) putRuleset(ctx context.Context, r Ruleset, events ...any) error {
 	pb := rulesetToProto(r)
 	cfg := prodcatv1.RulesetMatchConfig()
 	allTags := rulesetTags(r)
@@ -365,7 +365,7 @@ func (c *Client) unlinkRulesetFromProduct(ctx context.Context, productID, rulese
 
 // ─── Import (persistence) ───
 
-func (c *Client) importCatalogBatch(ctx context.Context, rulesets []Ruleset, products []Product, prov Provenance, onConflict OnConflict, importEvent *CatalogImportedEvent, actor string) error {
+func (c *Client) importCatalogBatch(ctx context.Context, rulesets []Ruleset, products []Product, onConflict OnConflict, importEvent *CatalogImportedEvent, actor string) error {
 	var ops []store.BatchWriteOp
 
 	rulesetCfg := prodcatv1.RulesetMatchConfig()
@@ -601,14 +601,16 @@ func productToProto(p Product) *prodcatv1.Product {
 		status = "disabled"
 	}
 	return &prodcatv1.Product{
-		ProductId:       p.ProductID,
-		Name:            p.Name,
-		Description:     p.Description,
-		Tags:            p.Tags,
-		Status:          status,
-		ParentProductId: p.ParentProductID,
-		RulesetIds:      p.BaseRulesetIDs,
-		Meta:            meta,
+		ProductId:         p.ProductID,
+		Name:              p.Name,
+		Description:       p.Description,
+		Tags:              p.Tags,
+		Status:            status,
+		ParentProductId:   p.ParentProductID,
+		RulesetIds:        p.BaseRulesetIDs,
+		Meta:              meta,
+		Routing:           p.Routing,
+		MultiSubscription: p.MultiSubscription,
 	}
 }
 
@@ -645,6 +647,10 @@ func productFromProto(pb *prodcatv1.Product, storedTags []string) Product {
 			p.Ruleset = []byte(rs)
 		}
 	}
+	if len(pb.Routing) > 0 {
+		p.Routing = pb.Routing
+	}
+	p.MultiSubscription = pb.MultiSubscription
 	return p
 }
 

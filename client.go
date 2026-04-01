@@ -42,7 +42,7 @@ func (c *Client) EntityStore() es.EntityStorer {
 
 // ─── Product Management ───
 
-func (c *Client) RegisterProduct(ctx context.Context, p Product, prov Provenance) (*Product, error) {
+func (c *Client) RegisterProduct(ctx context.Context, p Product) (*Product, error) {
 	if p.ProductID == "" {
 		return nil, fmt.Errorf("product_id is required: %w", ErrValidation)
 	}
@@ -53,7 +53,7 @@ func (c *Client) RegisterProduct(ctx context.Context, p Product, prov Provenance
 	p.CreatedAt = now
 	p.UpdatedAt = now
 	actor := actorFromContext(ctx)
-	if err := c.createProduct(ctx, p, prov, &ProductCreatedEvent{
+	if err := c.createProduct(ctx, p, &ProductCreatedEvent{
 		ProductID: p.ProductID, Actor: actor, Name: p.Name,
 		Description: p.Description, Tags: p.Tags,
 		CurrencyCode: p.CurrencyCode, BaseRulesetIDs: p.BaseRulesetIDs,
@@ -71,10 +71,10 @@ func (c *Client) ListProducts(ctx context.Context, filter ListFilter) ([]Product
 	return c.listProducts(ctx, filter)
 }
 
-func (c *Client) UpdateProduct(ctx context.Context, p Product, prov Provenance) (*Product, error) {
+func (c *Client) UpdateProduct(ctx context.Context, p Product) (*Product, error) {
 	p.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putProduct(ctx, p, prov, &ProductUpdatedEvent{
+	if err := c.putProduct(ctx, p, &ProductUpdatedEvent{
 		ProductID: p.ProductID, Actor: actor, Name: p.Name,
 		Description: p.Description, Tags: p.Tags,
 		CurrencyCode: p.CurrencyCode, BaseRulesetIDs: p.BaseRulesetIDs,
@@ -84,7 +84,7 @@ func (c *Client) UpdateProduct(ctx context.Context, p Product, prov Provenance) 
 	return &p, nil
 }
 
-func (c *Client) DisableProduct(ctx context.Context, productID string, reason DisabledReason, prov Provenance) (*Product, error) {
+func (c *Client) DisableProduct(ctx context.Context, productID string, reason DisabledReason) (*Product, error) {
 	p, err := c.getProduct(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
@@ -93,7 +93,7 @@ func (c *Client) DisableProduct(ctx context.Context, productID string, reason Di
 	p.DisabledReason = reason
 	p.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putProduct(ctx, *p, prov, &ProductDisabledEvent{
+	if err := c.putProduct(ctx, *p, &ProductDisabledEvent{
 		ProductID: productID, Actor: actor, Reason: string(reason), Name: p.Name,
 	}); err != nil {
 		return nil, fmt.Errorf("put product: %w", err)
@@ -101,7 +101,7 @@ func (c *Client) DisableProduct(ctx context.Context, productID string, reason Di
 	return p, nil
 }
 
-func (c *Client) EnableProduct(ctx context.Context, productID string, prov Provenance) (*Product, error) {
+func (c *Client) EnableProduct(ctx context.Context, productID string) (*Product, error) {
 	p, err := c.getProduct(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
@@ -110,7 +110,7 @@ func (c *Client) EnableProduct(ctx context.Context, productID string, prov Prove
 	p.DisabledReason = ""
 	p.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putProduct(ctx, *p, prov, &ProductEnabledEvent{
+	if err := c.putProduct(ctx, *p, &ProductEnabledEvent{
 		ProductID: productID, Actor: actor, Name: p.Name,
 	}); err != nil {
 		return nil, fmt.Errorf("put product: %w", err)
@@ -119,7 +119,7 @@ func (c *Client) EnableProduct(ctx context.Context, productID string, prov Prove
 }
 
 // DeleteProduct soft-deletes a product.
-func (c *Client) DeleteProduct(ctx context.Context, productID string, prov Provenance) error {
+func (c *Client) DeleteProduct(ctx context.Context, productID string) error {
 	p, err := c.getProduct(ctx, productID)
 	if err != nil {
 		return fmt.Errorf("get product: %w", err)
@@ -128,7 +128,7 @@ func (c *Client) DeleteProduct(ctx context.Context, productID string, prov Prove
 	p.Disabled = true
 	p.DisabledReason = DisabledReasonDeleted
 	p.UpdatedAt = time.Now().UTC()
-	if err := c.putProduct(ctx, *p, prov, &ProductDeletedEvent{
+	if err := c.putProduct(ctx, *p, &ProductDeletedEvent{
 		ProductID: productID, Actor: actor, Name: p.Name,
 	}); err != nil {
 		return fmt.Errorf("mark deleted: %w", err)
@@ -138,7 +138,7 @@ func (c *Client) DeleteProduct(ctx context.Context, productID string, prov Prove
 
 // ─── Ruleset Management ───
 
-func (c *Client) CreateRuleset(ctx context.Context, r Ruleset, prov Provenance) (*Ruleset, error) {
+func (c *Client) CreateRuleset(ctx context.Context, r Ruleset) (*Ruleset, error) {
 	if r.Name == "" {
 		return nil, fmt.Errorf("ruleset name is required: %w", ErrValidation)
 	}
@@ -156,7 +156,7 @@ func (c *Client) CreateRuleset(ctx context.Context, r Ruleset, prov Provenance) 
 	r.CreatedAt = now
 	r.UpdatedAt = now
 	actor := actorFromContext(ctx)
-	if err := c.createRuleset(ctx, r, prov, &RulesetCreatedEvent{
+	if err := c.createRuleset(ctx, r, &RulesetCreatedEvent{
 		RulesetID: r.ID, Actor: actor, Name: r.Name,
 		Description: r.Description, Version: r.Version,
 	}); err != nil {
@@ -173,7 +173,7 @@ func (c *Client) ListRulesets(ctx context.Context) ([]Ruleset, error) {
 	return c.listRulesets(ctx)
 }
 
-func (c *Client) DisableRuleset(ctx context.Context, id string, reason DisabledReason, prov Provenance) (*Ruleset, error) {
+func (c *Client) DisableRuleset(ctx context.Context, id string, reason DisabledReason) (*Ruleset, error) {
 	rs, err := c.getRuleset(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get ruleset: %w", err)
@@ -182,7 +182,7 @@ func (c *Client) DisableRuleset(ctx context.Context, id string, reason DisabledR
 	rs.DisabledReason = reason
 	rs.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putRuleset(ctx, *rs, prov, &RulesetDisabledEvent{
+	if err := c.putRuleset(ctx, *rs, &RulesetDisabledEvent{
 		RulesetID: id, Actor: actor, Reason: string(reason), Name: rs.Name,
 	}); err != nil {
 		return nil, fmt.Errorf("put ruleset: %w", err)
@@ -190,7 +190,7 @@ func (c *Client) DisableRuleset(ctx context.Context, id string, reason DisabledR
 	return rs, nil
 }
 
-func (c *Client) EnableRuleset(ctx context.Context, id string, prov Provenance) (*Ruleset, error) {
+func (c *Client) EnableRuleset(ctx context.Context, id string) (*Ruleset, error) {
 	rs, err := c.getRuleset(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get ruleset: %w", err)
@@ -199,7 +199,7 @@ func (c *Client) EnableRuleset(ctx context.Context, id string, prov Provenance) 
 	rs.DisabledReason = ""
 	rs.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putRuleset(ctx, *rs, prov, &RulesetEnabledEvent{
+	if err := c.putRuleset(ctx, *rs, &RulesetEnabledEvent{
 		RulesetID: id, Actor: actor, Name: rs.Name,
 	}); err != nil {
 		return nil, fmt.Errorf("put ruleset: %w", err)
@@ -208,7 +208,7 @@ func (c *Client) EnableRuleset(ctx context.Context, id string, prov Provenance) 
 }
 
 // DeleteRuleset soft-deletes a ruleset.
-func (c *Client) DeleteRuleset(ctx context.Context, id string, prov Provenance) error {
+func (c *Client) DeleteRuleset(ctx context.Context, id string) error {
 	rs, err := c.getRuleset(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get ruleset: %w", err)
@@ -217,7 +217,7 @@ func (c *Client) DeleteRuleset(ctx context.Context, id string, prov Provenance) 
 	rs.Disabled = true
 	rs.DisabledReason = DisabledReasonDeleted
 	rs.UpdatedAt = time.Now().UTC()
-	if err := c.putRuleset(ctx, *rs, prov, &RulesetDeletedEvent{
+	if err := c.putRuleset(ctx, *rs, &RulesetDeletedEvent{
 		RulesetID: id, Actor: actor, Name: rs.Name,
 	}); err != nil {
 		return fmt.Errorf("mark deleted: %w", err)
@@ -227,7 +227,7 @@ func (c *Client) DeleteRuleset(ctx context.Context, id string, prov Provenance) 
 
 // ─── Convenience: Ruleset Management on Products ───
 
-func (c *Client) AddRuleset(ctx context.Context, productID, rulesetID string, prov Provenance) (*Product, error) {
+func (c *Client) AddRuleset(ctx context.Context, productID, rulesetID string) (*Product, error) {
 	p, err := c.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
@@ -248,7 +248,7 @@ func (c *Client) AddRuleset(ctx context.Context, productID, rulesetID string, pr
 	p.BaseRulesetIDs = append(p.BaseRulesetIDs, rulesetID)
 	p.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putProduct(ctx, *p, prov, &RulesetLinkedToProductEvent{
+	if err := c.putProduct(ctx, *p, &RulesetLinkedToProductEvent{
 		ProductID: productID, RulesetID: rulesetID, Actor: actor,
 		ProductName: p.Name, RulesetName: rs.Name,
 	}); err != nil {
@@ -261,7 +261,7 @@ func (c *Client) AddRuleset(ctx context.Context, productID, rulesetID string, pr
 	return p, nil
 }
 
-func (c *Client) RemoveRuleset(ctx context.Context, productID, rulesetID string, prov Provenance) (*Product, error) {
+func (c *Client) RemoveRuleset(ctx context.Context, productID, rulesetID string) (*Product, error) {
 	p, err := c.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
@@ -281,7 +281,7 @@ func (c *Client) RemoveRuleset(ctx context.Context, productID, rulesetID string,
 	p.BaseRulesetIDs = ids
 	p.UpdatedAt = time.Now().UTC()
 	actor := actorFromContext(ctx)
-	if err := c.putProduct(ctx, *p, prov, &RulesetUnlinkedFromProductEvent{
+	if err := c.putProduct(ctx, *p, &RulesetUnlinkedFromProductEvent{
 		ProductID: productID, RulesetID: rulesetID, Actor: actor,
 		ProductName: p.Name, RulesetName: rulesetName,
 	}); err != nil {
@@ -294,13 +294,50 @@ func (c *Client) RemoveRuleset(ctx context.Context, productID, rulesetID string,
 	return p, nil
 }
 
-func (c *Client) SetProductRuleset(ctx context.Context, productID string, content []byte, prov Provenance) (*Product, error) {
+func (c *Client) SetProductRuleset(ctx context.Context, productID string, content []byte) (*Product, error) {
 	p, err := c.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
 	}
 	p.Ruleset = content
-	return c.UpdateProduct(ctx, *p, prov)
+	return c.UpdateProduct(ctx, *p)
+}
+
+// ─── Routing ───
+
+// SetRouting replaces the entire routing map for a product.
+func (c *Client) SetRouting(ctx context.Context, productID string, routing map[string]string) (*Product, error) {
+	p, err := c.GetProduct(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("get product: %w", err)
+	}
+	p.Routing = routing
+	return c.UpdateProduct(ctx, *p)
+}
+
+// SetRoute sets a single capability→provider route on a product.
+func (c *Client) SetRoute(ctx context.Context, productID, capability, providerID string) (*Product, error) {
+	p, err := c.GetProduct(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("get product: %w", err)
+	}
+	if p.Routing == nil {
+		p.Routing = make(map[string]string)
+	}
+	p.Routing[capability] = providerID
+	return c.UpdateProduct(ctx, *p)
+}
+
+// RemoveRoute removes a single capability route from a product.
+func (c *Client) RemoveRoute(ctx context.Context, productID, capability string) (*Product, error) {
+	p, err := c.GetProduct(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("get product: %w", err)
+	}
+	if p.Routing != nil {
+		delete(p.Routing, capability)
+	}
+	return c.UpdateProduct(ctx, *p)
 }
 
 // ─── Ruleset Resolution ───

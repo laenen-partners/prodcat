@@ -77,8 +77,6 @@ func validRulesetContent() []byte {
 func TestProductRegistrationAndLookup(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:product-crud"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "savings-basic", Name: "Basic Savings Account",
 		Tags:         []string{"family:casa", "type:savings"},
@@ -86,7 +84,7 @@ func TestProductRegistrationAndLookup(t *testing.T) {
 		Availability: prodcat.GeoAvailability{
 			Mode: prodcat.AvailabilityModeSpecificCountries, CountryCodes: []string{"US"},
 		},
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	p, err := client.GetProduct(ctx, "savings-basic")
@@ -100,12 +98,10 @@ func TestProductRegistrationAndLookup(t *testing.T) {
 func TestRegisterProduct_Validation(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:validation"}
-
 	t.Run("empty product_id", func(t *testing.T) {
 		_, err := client.RegisterProduct(ctx, prodcat.Product{
 			Name: "No ID",
-		}, prov)
+		})
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, prodcat.ErrValidation))
 	})
@@ -113,7 +109,7 @@ func TestRegisterProduct_Validation(t *testing.T) {
 	t.Run("empty name", func(t *testing.T) {
 		_, err := client.RegisterProduct(ctx, prodcat.Product{
 			ProductID: "no-name",
-		}, prov)
+		})
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, prodcat.ErrValidation))
 	})
@@ -122,16 +118,14 @@ func TestRegisterProduct_Validation(t *testing.T) {
 func TestRegisterProduct_DuplicateReturnsAlreadyExists(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:duplicate"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "dup-test", Name: "First",
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "dup-test", Name: "Second",
-	}, prov)
+	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrAlreadyExists))
 }
@@ -141,12 +135,10 @@ func TestRegisterProduct_DuplicateReturnsAlreadyExists(t *testing.T) {
 func TestCreateRuleset_Validation(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:validation"}
-
 	t.Run("empty name", func(t *testing.T) {
 		_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 			Content: validRulesetContent(),
-		}, prov)
+		})
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, prodcat.ErrValidation))
 	})
@@ -154,7 +146,7 @@ func TestCreateRuleset_Validation(t *testing.T) {
 	t.Run("empty content", func(t *testing.T) {
 		_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 			Name: "No Content",
-		}, prov)
+		})
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, prodcat.ErrValidation))
 	})
@@ -163,16 +155,14 @@ func TestCreateRuleset_Validation(t *testing.T) {
 func TestCreateRuleset_DuplicateReturnsAlreadyExists(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:dup-ruleset"}
-
 	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "dup-rs", Name: "First", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "dup-rs", Name: "Second", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrAlreadyExists))
 }
@@ -202,15 +192,13 @@ func TestGetRuleset_NotFoundReturnsErrNotFound(t *testing.T) {
 func TestDisableEnableRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:disable"}
-
 	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "disable-test", Name: "Disable Test", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	// Disable
-	rs, err := client.DisableRuleset(ctx, "disable-test", prodcat.DisabledReasonDeleted, prov)
+	rs, err := client.DisableRuleset(ctx, "disable-test", prodcat.DisabledReasonDeleted)
 	require.NoError(t, err)
 	assert.True(t, rs.Disabled)
 	assert.Equal(t, prodcat.DisabledReasonDeleted, rs.DisabledReason)
@@ -221,7 +209,7 @@ func TestDisableEnableRuleset(t *testing.T) {
 	assert.True(t, rs.Disabled)
 
 	// Enable
-	rs, err = client.EnableRuleset(ctx, "disable-test", prov)
+	rs, err = client.EnableRuleset(ctx, "disable-test")
 	require.NoError(t, err)
 	assert.False(t, rs.Disabled)
 	assert.Empty(t, rs.DisabledReason)
@@ -232,14 +220,12 @@ func TestDisableEnableRuleset(t *testing.T) {
 func TestAddRuleset_RejectsNonexistentRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:add-nonexistent"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "add-nonexistent-test", Name: "Test",
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	_, err = client.AddRuleset(ctx, "add-nonexistent-test", "ghost-ruleset", prov)
+	_, err = client.AddRuleset(ctx, "add-nonexistent-test", "ghost-ruleset")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrNotFound))
 }
@@ -247,22 +233,20 @@ func TestAddRuleset_RejectsNonexistentRuleset(t *testing.T) {
 func TestAddRuleset_RejectsDisabledRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:add-disabled"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "add-disabled-test", Name: "Test",
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "disabled-rs", Name: "Disabled", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	_, err = client.DisableRuleset(ctx, "disabled-rs", prodcat.DisabledReasonDeleted, prov)
+	_, err = client.DisableRuleset(ctx, "disabled-rs", prodcat.DisabledReasonDeleted)
 	require.NoError(t, err)
 
-	_, err = client.AddRuleset(ctx, "add-disabled-test", "disabled-rs", prov)
+	_, err = client.AddRuleset(ctx, "add-disabled-test", "disabled-rs")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrRulesetDisabled))
 }
@@ -272,12 +256,10 @@ func TestAddRuleset_RejectsDisabledRuleset(t *testing.T) {
 func TestRegisterProduct_RejectsNonexistentRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:reg-ghost-rs"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "reg-ghost-rs", Name: "Test",
 		BaseRulesetIDs: []string{"does-not-exist"},
-	}, prov)
+	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrNotFound))
 }
@@ -285,20 +267,18 @@ func TestRegisterProduct_RejectsNonexistentRuleset(t *testing.T) {
 func TestRegisterProduct_RejectsDisabledRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:reg-disabled-rs"}
-
 	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "reg-disabled", Name: "Will Disable", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	_, err = client.DisableRuleset(ctx, "reg-disabled", prodcat.DisabledReasonDeleted, prov)
+	_, err = client.DisableRuleset(ctx, "reg-disabled", prodcat.DisabledReasonDeleted)
 	require.NoError(t, err)
 
 	_, err = client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "reg-disabled-rs", Name: "Test",
 		BaseRulesetIDs: []string{"reg-disabled"},
-	}, prov)
+	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, prodcat.ErrRulesetDisabled))
 }
@@ -308,27 +288,25 @@ func TestRegisterProduct_RejectsDisabledRuleset(t *testing.T) {
 func TestResolveRuleset_SkipsDisabledBaseRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:resolve-skip"}
-
 	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "active-rs", Name: "Active",
 		Content: []byte("evaluations:\n- name: check_active\n  expression: \"true\"\n  writes: active_result"),
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "will-disable-rs", Name: "Will Disable",
 		Content: []byte("evaluations:\n- name: check_disabled\n  expression: \"true\"\n  writes: disabled_result"),
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "resolve-skip-test", Name: "Test",
 		BaseRulesetIDs: []string{"active-rs", "will-disable-rs"},
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	_, err = client.DisableRuleset(ctx, "will-disable-rs", prodcat.DisabledReasonDeleted, prov)
+	_, err = client.DisableRuleset(ctx, "will-disable-rs", prodcat.DisabledReasonDeleted)
 	require.NoError(t, err)
 
 	resolved, err := client.ResolveRuleset(ctx, "resolve-skip-test")
@@ -365,27 +343,25 @@ func TestResolveRuleset(t *testing.T) {
 func TestAddRemoveRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:ruleset-mgmt"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "test-ruleset-mgmt", Name: "Test",
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "rs-1", Name: "Ruleset 1", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	p, err := client.AddRuleset(ctx, "test-ruleset-mgmt", "rs-1", prov)
+	p, err := client.AddRuleset(ctx, "test-ruleset-mgmt", "rs-1")
 	require.NoError(t, err)
 	assert.Contains(t, p.BaseRulesetIDs, "rs-1")
 
-	p, err = client.AddRuleset(ctx, "test-ruleset-mgmt", "rs-1", prov)
+	p, err = client.AddRuleset(ctx, "test-ruleset-mgmt", "rs-1")
 	require.NoError(t, err)
 	assert.Len(t, p.BaseRulesetIDs, 1)
 
-	p, err = client.RemoveRuleset(ctx, "test-ruleset-mgmt", "rs-1", prov)
+	p, err = client.RemoveRuleset(ctx, "test-ruleset-mgmt", "rs-1")
 	require.NoError(t, err)
 	assert.Empty(t, p.BaseRulesetIDs)
 }
@@ -533,14 +509,12 @@ func TestValidateRulesetContent(t *testing.T) {
 func TestDeleteProduct(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:delete-product"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "delete-me", Name: "Delete Me",
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	err = client.DeleteProduct(ctx, "delete-me", prov)
+	err = client.DeleteProduct(ctx, "delete-me")
 	require.NoError(t, err)
 
 	_, err = client.GetProduct(ctx, "delete-me")
@@ -551,14 +525,12 @@ func TestDeleteProduct(t *testing.T) {
 func TestDeleteRuleset(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:delete-ruleset"}
-
 	_, err := client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "delete-me-rs", Name: "Delete Me", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
-	err = client.DeleteRuleset(ctx, "delete-me-rs", prov)
+	err = client.DeleteRuleset(ctx, "delete-me-rs")
 	require.NoError(t, err)
 
 	_, err = client.GetRuleset(ctx, "delete-me-rs")
@@ -571,25 +543,23 @@ func TestDeleteRuleset(t *testing.T) {
 func TestAddRuleset_CreatesGraphRelation(t *testing.T) {
 	client := sharedTestClient(t)
 	ctx := context.Background()
-	prov := prodcat.Provenance{SourceURN: "test:graph-link"}
-
 	_, err := client.RegisterProduct(ctx, prodcat.Product{
 		ProductID: "graph-test", Name: "Graph Test",
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	_, err = client.CreateRuleset(ctx, prodcat.Ruleset{
 		ID: "graph-rs", Name: "Graph RS", Content: validRulesetContent(),
-	}, prov)
+	})
 	require.NoError(t, err)
 
 	// AddRuleset should create both the BaseRulesetIDs entry and the graph relation.
-	p, err := client.AddRuleset(ctx, "graph-test", "graph-rs", prov)
+	p, err := client.AddRuleset(ctx, "graph-test", "graph-rs")
 	require.NoError(t, err)
 	assert.Contains(t, p.BaseRulesetIDs, "graph-rs")
 
 	// RemoveRuleset should remove both.
-	p, err = client.RemoveRuleset(ctx, "graph-test", "graph-rs", prov)
+	p, err = client.RemoveRuleset(ctx, "graph-test", "graph-rs")
 	require.NoError(t, err)
 	assert.Empty(t, p.BaseRulesetIDs)
 }

@@ -7,7 +7,7 @@ Prodcat is a product catalogue and ruleset store. It is the **data layer** — s
 ## Tech stack
 
 - **Language**: Go 1.26+
-- **Persistence**: [entitystore](https://github.com/laenen-partners/entitystore) v0.15.0 on PostgreSQL (pgvector), with transactional preconditions
+- **Persistence**: [entitystore](https://github.com/laenen-partners/entitystore) v0.26.0 on PostgreSQL (pgvector), with transactional preconditions
 - **Tags**: [tags](https://github.com/laenen-partners/tags) v0.2.0 for well-known status/disabled-reason/entity tags
 - **Proto**: buf with `protoc-gen-entitystore` for match config generation
 - **Testing**: testcontainers-go with `pgvector/pgvector:pg17`
@@ -16,19 +16,17 @@ Prodcat is a product catalogue and ruleset store. It is the **data layer** — s
 ## Project structure
 
 ```
-prodcat.go              — domain types: Product, Ruleset, enums, ListFilter, Provenance
+prodcat.go              — domain types: Product, Ruleset, enums, ListFilter
 errors.go               — sentinel errors (ErrNotFound, ErrAlreadyExists, ErrRulesetDisabled, ErrValidation)
-store.go                — Store interface (persistence contract with CreateProduct/CreateRuleset)
-client.go               — Client: product/ruleset CRUD, ResolveRuleset, Disable/Enable, convenience methods
-import.go               — Import: catalogue definition parsing, ImportTracker interface
-prodcat_test.go         — Integration tests (testcontainers, 13 tests)
-
-entitystore/store.go    — entitystore-backed Store with preconditions + tags lifecycle
-entitystore/tracker.go  — entitystore-backed ImportTracker with MustNotExist precondition
+client.go               — Client: product/ruleset CRUD, ResolveRuleset, Disable/Enable, Routing, convenience methods
+persistence.go          — entitystore persistence: proto conversions, tags, events, BatchWrite operations
+import.go               — Import: catalogue definition parsing, OnConflict options
+events.go               — business event types (ProductCreated, RulesetUpdated, CatalogImported, etc.)
+prodcat_test.go         — Integration tests (testcontainers, 36 tests)
 
 proto/prodcat/v1/       — Proto definitions with entitystore annotations
 gen/prodcat/v1/         — Generated Go code (pb.go + *_entitystore.go match configs)
-catalog/                — Catalogue definition YAML files (timestamped)
+examples/               — Catalogue definition YAML files (timestamped)
 docs/adr/               — Architecture Decision Records
 ```
 
@@ -50,73 +48,84 @@ Tests require Docker (testcontainers spins up PostgreSQL).
 Prodcat stores products and rulesets. It does NOT evaluate rules — that's the onboarding package's job. The main entry point is `prodcat.Client`:
 
 ```go
-client := prodcat.NewClient(store)
-client.RegisterProduct(ctx, product, provenance)
+client := prodcat.NewClient(entityStore)
+client.RegisterProduct(ctx, product)
 client.ResolveRuleset(ctx, productID) // → merged YAML for evalengine
-client.AddRuleset(ctx, productID, rulesetID, provenance)
-client.Import(ctx, filename, data, tracker) // import catalogue definitions
+client.AddRuleset(ctx, productID, rulesetID)
+client.Import(ctx, filename, data)    // import catalogue definitions
+client.SetRoute(ctx, productID, "banking", "provider-abc")
 ```
 
-### Layered architecture
+### Flat architecture
 
-Core Go types + Store interface live in the root `prodcat` package. The `entitystore` subpackage provides the persistence implementation. All subpackages share one `go.mod`.
+Everything lives in the root `prodcat` package. No subpackages, no Store interface — `Client` holds an `entitystore.EntityStorer` directly and uses it for all persistence. The `NewClient(es)` constructor takes the entitystore instance.
 
-### Provenance
-
-All write operations accept a `Provenance` (SourceURN + Reason) that maps to entitystore's provenance system. This gives a full audit trail: who changed what, when, and why.
-
-```go
-prov := prodcat.Provenance{SourceURN: "import:20260318", Reason: "initial load"}
-```
-
-### Transactional preconditions (entitystore v0.15.0)
+### Transactional preconditions
 
 Business rules are enforced atomically inside entitystore transactions via preconditions:
-- `MustNotExist` — prevents duplicate products, rulesets, and import records
+- `MustNotExist` — prevents duplicate products and rulesets
 - `MustExist` + `TagForbidden` — ensures referenced rulesets exist and are not disabled
 - No TOCTOU gap between validation and write
 
-### Tags lifecycle (tags v0.2.0)
+### Tags lifecycle
 
 All entities use well-known tags from the `tags` package for consistent status management:
-- Products: `entity:product`, `status:active` or `status:disabled` + `disabled-reason:suspended`
-- Rulesets: `entity:ruleset`, `status:active` or `status:disabled` + `disabled-reason:<reason>`
+- Products: `entity:product`, `status:active` or `status:disabled` + `status_reason:<reason>`
+- Rulesets: `entity:ruleset`, `status:active` or `status:disabled` + `status_reason:<reason>`
 - Preconditions use `TagForbidden: "status:disabled"` for atomic disabled checks
 
 ### Entitystore integration
-- All persistence goes through entitystore (in the `entitystore/` subpackage)
+- All persistence goes through entitystore directly on the Client
 - Proto definitions carry `entitystore.v1.field` and `entitystore.v1.message` annotations
-- The entitystore `Store` uses `matching.BuildAnchors(data, cfg)` and `matching.BuildTokens(data, cfg)` from generated configs
+- Generated `*WriteOp()` and `*MatchConfig()` functions wire anchors, tokens, and data automatically
 - Domain fields like CurrencyCode, Availability are stored in the proto's `meta` map
+- Routing is a dedicated `map<string, string>` proto field
 
 ### Ruleset composition
 - Rulesets are flat with a shared `reads`/`writes` namespace
 - Products compose rulesets via `base_ruleset_ids` (stored as `ruleset_ids` in proto)
 - `ResolveRuleset` merges all rulesets into one flat YAML document (skips disabled rulesets)
 - The merged YAML is consumed by evalengine (in the onboarding package)
+- Rulesets have a `ContentHash` (SHA-256) computed on every write for change detection
 
 ### Import system
-- Catalogue definition files are YAML with `kind: catalog`. Timestamped filenames
-- `ImportTracker` is entitystore-backed with `MustNotExist` precondition for dedup
-- Imports contain both rulesets and products. Rulesets are imported first
-- Imports use provenance with `SourceURN: "import:<filename>"`
-- Rulesets and products are upserted for idempotency
+- Catalogue definition files are YAML with `kind: catalog`
+- All rulesets and products are written atomically in a single `BatchWrite` transaction
+- `OnConflictUpdate` (default) upserts; `OnConflictError` fails on duplicates
+- Per-entity business events (Created/Updated) and a `CatalogImportedEvent` are emitted
+- Graph relations (product→ruleset) are created for `base_ruleset_ids`
+
+### Routing
+- Products have a `Routing` map: capability name → provider ID
+- Keys: "banking", "cards", "screening", "payments", "notifications"
+- Values: provider IDs registered in the adaptor registry
+- Convenience methods: `SetRouting`, `SetRoute`, `RemoveRoute`
 
 ### Soft delete
-- Rulesets support soft delete via `DisableRuleset` / `EnableRuleset`
+- Products and rulesets support soft delete via `DeleteProduct` / `DeleteRuleset`
 - Disabled rulesets are excluded from `ResolveRuleset` and cannot be linked to products
 - The disabled state is stored in proto fields AND entitystore tags (`status:disabled`)
+
+### Business events
+All write operations emit business events stored alongside entities:
+- Product: Created, Updated, Disabled, Enabled, Deleted
+- Ruleset: Created, Updated, Disabled, Enabled, Deleted
+- Linking: RulesetLinkedToProduct, RulesetUnlinkedFromProduct
+- Import: CatalogImported (catalog-level summary)
+
+Actor is extracted from context via the `identity` package.
 
 ## Common patterns
 
 ### Adding a new entity type
 1. Create proto in `proto/prodcat/v1/` with entitystore annotations
 2. Run `buf generate`
-3. Register the generated `*MatchConfig()` in `matchRegistry` in `entitystore/store.go`
-4. Add Store interface methods + entitystore Store implementation
+3. Register the generated `*MatchConfig()` in `matchRegistry` in `persistence.go`
+4. Add persistence methods on Client in `persistence.go`
+5. Add public API methods on Client in `client.go`
 
 ### Adding a new product
-1. Create a catalogue definition YAML file in `catalog/` with timestamped filename
+1. Create a catalogue definition YAML file in `examples/` with timestamped filename
 2. Define rulesets with CEL expressions
 3. Reference base rulesets via `base_ruleset_ids`
 4. Import with `client.Import()`
@@ -124,18 +133,19 @@ All entities use well-known tags from the `tags` package for consistent status m
 ## What NOT to do
 
 - Do not add eval logic to prodcat — that belongs in onboarding
-- Do not hand-code anchor queries in entitystore Store — use `matching.BuildAnchors()`
 - Do not use `json:"id"` for anchor fields — must match proto field name
 - Do not put product operational details (fees, rates) in prodcat — core banking owns that
 - Do not commit changes to `gen/` without running `buf generate` first
 - Do not use raw tag strings — use the `tags` package for well-known tag types
+- Do not add interfaces or subpackages unless truly needed — keep it flat
 
 ## Dependencies
 
 | Dependency | Purpose |
 |---|---|
-| `github.com/laenen-partners/entitystore` | Persistence (PostgreSQL, anchors, tokens, matching, preconditions) |
+| `github.com/laenen-partners/entitystore` | Persistence (PostgreSQL, anchors, tokens, matching, preconditions, events) |
 | `github.com/laenen-partners/tags` | Well-known tag types (status, disabled-reason, entity) |
+| `github.com/laenen-partners/identity` | Actor extraction from context for event attribution |
 | `github.com/jackc/pgx/v5` | PostgreSQL driver |
 | `github.com/google/uuid` | UUID generation |
 | `gopkg.in/yaml.v3` | YAML parsing (catalogue definitions, rulesets) |
